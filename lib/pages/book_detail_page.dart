@@ -159,7 +159,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
               child:
                   Text(_error!, style: const TextStyle(color: Colors.grey)))
           : b == null
-              ? const Center(child: CircularProgressIndicator())
+              ? const LkLoadingIndicator()
               : CustomScrollView(
                   controller: _scroll,
                   slivers: [

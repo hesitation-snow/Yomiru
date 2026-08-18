@@ -270,7 +270,7 @@ class _SettingsPageState extends State<SettingsPage> {
         future: LKApi.client.post('/api/bff/my-medals-v1', LKApi.client.authed()),
         builder: (_, snap) {
           if (snap.connectionState != ConnectionState.done) {
-            return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()));
+            return const LkLoadingIndicator(minHeight: 200);
           }
           if (snap.hasError) return Text('${snap.error}');
           final list = ((snap.data?['list'] as List?) ?? const []);

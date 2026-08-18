@@ -1491,7 +1491,16 @@ class _ReaderPageState extends State<ReaderPage> {
     final url =
         'https://www.lightnovel.fun/reader/${widget.bookId}/${widget.chapterId}';
     try {
-      await Share.share(url, subject: _title);
+      final renderObject = context.findRenderObject();
+      final box = renderObject is RenderBox ? renderObject : null;
+      final sharePositionOrigin = box == null
+          ? null
+          : box.localToGlobal(Offset.zero) & box.size;
+      await Share.share(
+        url,
+        subject: _title,
+        sharePositionOrigin: sharePositionOrigin,
+      );
     } catch (e) {
       if (mounted) showLkError(context, '分享失败: $e');
     }
@@ -1560,9 +1569,7 @@ class _ReaderPageState extends State<ReaderPage> {
               children: [
                 Positioned.fill(
                   child: _loading
-                      ? Center(
-                          child:
-                              CircularProgressIndicator(color: _textColor))
+                      ? LkLoadingIndicator(color: _textColor)
                       : LayoutBuilder(builder: (ctx, cons) {
                           final vw = cons.maxWidth;
                           final vh = cons.maxHeight;

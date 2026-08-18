@@ -612,7 +612,7 @@ class _CommentsPageState extends State<CommentsPage> {
       body: Column(children: [
         Expanded(
           child: _loading
-              ? const Center(child: CircularProgressIndicator())
+              ? const LkLoadingIndicator()
               : _comments.isEmpty
                   ? Center(
                       child: Text(

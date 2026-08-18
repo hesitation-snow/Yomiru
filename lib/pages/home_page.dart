@@ -394,6 +394,8 @@ class FeedTab extends StatefulWidget {
 
 class _FeedTabState extends State<FeedTab> {
   final List<dynamic> _items = [];
+  static const _recommendCacheKey = 'home_recommend_v1';
+  List<LKBook> _recommendBooks = [];
   int _page = 0;
   bool _loading = false;
   bool _hasMore = true;
@@ -405,7 +407,39 @@ class _FeedTabState extends State<FeedTab> {
   @override
   void initState() {
     super.initState();
+    _loadRecommend();
     _load(1, false);
+  }
+
+  /// 推荐卡只由信息流父状态加载一次，列表/网格模式共用同一份数据。
+  Future<void> _loadRecommend() async {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(_recommendCacheKey);
+    if (raw != null) {
+      try {
+        final cached = (jsonDecode(raw) as List)
+            .map((e) => LKBook.fromJson((e as Map).cast<String, dynamic>()))
+            .toList();
+        if (mounted && cached.isNotEmpty) {
+          setState(() => _recommendBooks = cached);
+        }
+      } catch (_) {}
+    }
+    try {
+      final books = await LKApi.homeRecommend();
+      if (!mounted) return;
+      if (books.isNotEmpty) setState(() => _recommendBooks = books);
+      await p.setString(
+        _recommendCacheKey,
+        jsonEncode(books
+            .map((b) => {
+                  'book_id': b.bookId,
+                  'title': b.title,
+                  'cover_url': b.coverUrl,
+                })
+            .toList()),
+      );
+    } catch (_) {}
   }
 
   @override
@@ -462,7 +496,7 @@ class _FeedTabState extends State<FeedTab> {
           onRetry: () => _load(1, false));
     }
     if (_items.isEmpty && _loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const LkLoadingIndicator();
     }
     if (_items.isEmpty) {
       return _feedHint(
@@ -475,14 +509,14 @@ class _FeedTabState extends State<FeedTab> {
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
       itemCount: _items.length + 1 + (_hasMore ? 1 : 0),
       itemBuilder: (_, i) {
-        if (i == 0) return const _HomeRecommendCard();
+        if (i == 0) return _HomeRecommendCard(books: _recommendBooks);
         final j = i - 1;
         if (j >= _items.length) {
           WidgetsBinding.instance
               .addPostFrameCallback((_) => _load(_page + 1, true));
           return const Padding(
             padding: EdgeInsets.all(12),
-            child: Center(child: CircularProgressIndicator()),
+            child: LkLoadingIndicator(),
           );
         }
         final book = _items[j];
@@ -500,7 +534,8 @@ class _FeedTabState extends State<FeedTab> {
 
     final gridView = CustomScrollView(
       slivers: [
-        const SliverToBoxAdapter(child: _HomeRecommendCard()),
+        SliverToBoxAdapter(
+            child: _HomeRecommendCard(books: _recommendBooks)),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
           sliver: SliverGrid(
@@ -516,7 +551,7 @@ class _FeedTabState extends State<FeedTab> {
                   // 触底加载更多(延迟到帧后,避免 build 期间 setState)
                   WidgetsBinding.instance.addPostFrameCallback(
                       (_) => _load(_page + 1, true));
-                  return const Center(child: CircularProgressIndicator());
+                  return const LkLoadingIndicator();
                 }
                 final book = _items[i];
                 return BookGridCard(
@@ -574,63 +609,14 @@ class _FeedTabState extends State<FeedTab> {
 
 // ==================== 首页好书推荐(官网模块) ====================
 
-class _HomeRecommendCard extends StatefulWidget {
-  const _HomeRecommendCard();
+class _HomeRecommendCard extends StatelessWidget {
+  final List<LKBook> books;
 
-  @override
-  State<_HomeRecommendCard> createState() => _HomeRecommendCardState();
-}
-
-class _HomeRecommendCardState extends State<_HomeRecommendCard> {
-  static const _cacheKey = 'home_recommend_v1';
-  List<LKBook> _books = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    await _loadCache();
-    await _refresh();
-  }
-
-  Future<void> _loadCache() async {
-    final p = await SharedPreferences.getInstance();
-    final raw = p.getString(_cacheKey);
-    if (raw == null) return;
-    try {
-      final list = (jsonDecode(raw) as List)
-          .map((e) => LKBook.fromJson((e as Map).cast<String, dynamic>()))
-          .toList();
-      if (mounted && list.isNotEmpty) setState(() => _books = list);
-    } catch (_) {}
-  }
-
-  Future<void> _refresh() async {
-    try {
-      final books = await LKApi.homeRecommend();
-      if (!mounted) return;
-      setState(() {
-        if (books.isNotEmpty) _books = books;
-      });
-      final p = await SharedPreferences.getInstance();
-      await p.setString(
-          _cacheKey,
-          jsonEncode(books
-              .map((b) => {
-                    'book_id': b.bookId,
-                    'title': b.title,
-                    'cover_url': b.coverUrl,
-                  })
-              .toList()));
-    } catch (_) {}
-  }
+  const _HomeRecommendCard({required this.books});
 
   @override
   Widget build(BuildContext context) {
-    if (_books.isEmpty) return const SizedBox.shrink();
+    if (books.isEmpty) return const SizedBox.shrink();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
@@ -666,10 +652,10 @@ class _HomeRecommendCardState extends State<_HomeRecommendCard> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-              itemCount: _books.length,
+              itemCount: books.length,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (_, i) {
-                final b = _books[i];
+                final b = books[i];
                 return SizedBox(
                   width: 96,
                   child: InkWell(
@@ -915,10 +901,10 @@ class _SectionTabState extends State<SectionTab> {
                 if (loading)
                   const Padding(
                     padding: EdgeInsets.only(bottom: 14),
-                    child: SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                    child: LkLoadingIndicator(
+                      minHeight: 32,
+                      size: 16,
+                      strokeWidth: 2,
                     ),
                   ),
               ]),
@@ -987,7 +973,7 @@ class _CloudHistoryTabState extends State<CloudHistoryTab> {
       );
     }
     if (_loading && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LkLoadingIndicator();
     }
     if (_error != null && _items.isEmpty) {
       return Center(child: Text(_error!, style: const TextStyle(color: Colors.grey)));

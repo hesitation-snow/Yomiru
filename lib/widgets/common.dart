@@ -7,6 +7,39 @@ import '../api/models.dart';
 const String kDefaultCover =
     'https://www.lightnovel.fun/sample-assets/legacy/default_article_cover_v.jpg';
 
+/// 页面级加载状态统一居中显示；[minHeight] 用于底部弹窗等固定高度区域。
+class LkLoadingIndicator extends StatelessWidget {
+  final double? minHeight;
+  final double size;
+  final double strokeWidth;
+  final Color? color;
+
+  const LkLoadingIndicator({
+    super.key,
+    this.minHeight,
+    this.size = 28,
+    this.strokeWidth = 3,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final indicator = Center(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: CircularProgressIndicator(
+          strokeWidth: strokeWidth,
+          color: color,
+        ),
+      ),
+    );
+    return minHeight == null
+        ? indicator
+        : SizedBox(height: minHeight, child: indicator);
+  }
+}
+
 /// 带缓存、圆角与阴影的封面/头像
 class CoverImage extends StatelessWidget {
   final String url;

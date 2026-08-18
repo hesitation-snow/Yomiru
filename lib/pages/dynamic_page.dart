@@ -46,6 +46,7 @@ class _DynamicPageState extends State<DynamicPage> {
               itemBuilder: (_, i) {
                 final d = _items[i];
                 return InkWell(
+                  onTap: () => _showComments(d.dynamicId),
                   onLongPress: () => _actions(d),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
@@ -194,14 +195,6 @@ class _DynamicPageState extends State<DynamicPage> {
               await LKApi.toggleDynamicFavorite(d.dynamicId, true);
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.comment_outlined),
-            title: const Text('查看评论'),
-            onTap: () {
-              Navigator.pop(context);
-              _showComments(d.dynamicId);
-            },
-          ),
         ]),
       ),
     );
@@ -217,7 +210,7 @@ class _DynamicPageState extends State<DynamicPage> {
           future: LKApi.dynamicComments(dynamicId),
           builder: (_, snap) {
             if (snap.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
+              return const LkLoadingIndicator();
             }
             if (snap.hasError) {
               return Center(child: Text('${snap.error}', style: const TextStyle(color: Colors.grey)));

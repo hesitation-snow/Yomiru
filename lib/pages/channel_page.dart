@@ -92,7 +92,7 @@ class _ChannelPageState extends State<ChannelPage> {
                     if (i >= _items.length) {
                       WidgetsBinding.instance
                           .addPostFrameCallback((_) => _load(_page + 1, true));
-                      return const Center(child: CircularProgressIndicator());
+                      return const LkLoadingIndicator();
                     }
                     final book = _items[i];
                     return BookCard(
@@ -120,7 +120,7 @@ class _ChannelPageState extends State<ChannelPage> {
                     if (i >= _items.length) {
                       WidgetsBinding.instance
                           .addPostFrameCallback((_) => _load(_page + 1, true));
-                      return const Center(child: CircularProgressIndicator());
+                      return const LkLoadingIndicator();
                     }
                     final book = _items[i];
                     return BookGridCard(

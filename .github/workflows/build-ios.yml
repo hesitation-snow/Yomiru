@@ -1,0 +1,59 @@
+name: Build iOS IPA (unsigned)
+
+# 仅手动触发（避免每次推送自动消耗 GitHub Actions 额度）
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.0'
+          cache: true
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build iOS app (unsigned)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -qry lk-unsigned.ipa Payload
+          ls -lh lk-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lk-unsigned-ipa
+          path: lk-unsigned.ipa
+          retention-days: 90
+
+      # 附赠:Android debug APK(仅测试用途;正式包必须使用仓库外的 release keystore)
+      - name: Accept Android licenses
+        run: yes | flutter doctor --android-licenses
+
+      - name: Build Android debug APK
+        run: |
+          flutter build apk --debug
+          ls -lh build/app/outputs/flutter-apk/app-debug.apk
+
+      - name: Upload Android APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lk-android-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 90

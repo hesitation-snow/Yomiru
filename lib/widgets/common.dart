@@ -313,6 +313,16 @@ class BookCard extends StatelessWidget {
 List<String> shortTags(List<String> tags) =>
     tags.where((t) => t.length <= 12).toList();
 
+/// 书籍网格使用自适应列数,避免平板/桌面设备上两列卡片被横向拉得过大。
+/// 手机通常保持两列,更宽的屏幕会增加列数而不是放大封面。
+SliverGridDelegate bookGridDelegate() =>
+    const SliverGridDelegateWithMaxCrossAxisExtent(
+      maxCrossAxisExtent: 220,
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 12,
+      childAspectRatio: 0.56,
+    );
+
 /// 视频网站风格:大封面竖排卡(双列网格用)
 class BookGridCard extends StatelessWidget {
   final LKBook book;

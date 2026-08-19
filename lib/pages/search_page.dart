@@ -259,13 +259,7 @@ class _SearchPageState extends State<SearchPage> {
                     : GridView.builder(
                         padding: EdgeInsets.fromLTRB(12, 4, 12,
                             12 + MediaQuery.of(context).padding.bottom),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 0.56,
-                        ),
+                        gridDelegate: bookGridDelegate(),
                         itemCount: _items.length,
                         itemBuilder: (_, i) {
                           final b = _items[i];
@@ -387,12 +381,7 @@ class _ShelfPageState extends State<ShelfPage> {
               child: GridView.builder(
                 padding: EdgeInsets.fromLTRB(12, 8, 12,
                     12 + MediaQuery.of(context).padding.bottom),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 0.56,
-                ),
+                gridDelegate: bookGridDelegate(),
                 itemCount: _items.length,
                 itemBuilder: (_, i) {
                   final b = _items[i];

@@ -109,12 +109,7 @@ class _ChannelPageState extends State<ChannelPage> {
               : GridView.builder(
                   padding: EdgeInsets.fromLTRB(12, 8, 12,
                       12 + MediaQuery.of(context).padding.bottom),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.56,
-                  ),
+                  gridDelegate: bookGridDelegate(),
                   itemCount: _items.length + (_hasMore ? 1 : 0),
                   itemBuilder: (_, i) {
                     if (i >= _items.length) {
@@ -218,13 +213,7 @@ class _RankPageState extends State<RankPage> {
                   : GridView.builder(
                       padding: EdgeInsets.fromLTRB(12, 8, 12,
                           12 + MediaQuery.of(context).padding.bottom),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 0.56,
-                      ),
+                      gridDelegate: bookGridDelegate(),
                       itemCount: _items.length,
                       itemBuilder: (_, i) {
                         final book = _items[i];

@@ -539,12 +539,7 @@ class _FeedTabState extends State<FeedTab> {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
           sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 12,
-              childAspectRatio: 0.56,
-            ),
+            gridDelegate: bookGridDelegate(),
             delegate: SliverChildBuilderDelegate(
               (_, i) {
                 if (i >= _items.length) {

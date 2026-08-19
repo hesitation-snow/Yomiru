@@ -1,7 +1,7 @@
 name: yomiru
 description: 轻之国度 lightnovel.fun 第三方客户端(基础版)
 publish_to: 'none'
-version: 1.0.4+5
+version: 1.0.5+6
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

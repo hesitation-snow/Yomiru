@@ -15,6 +15,7 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 val sideBySideRelease =
     providers.gradleProperty("sideBySideRelease").orNull == "true" ||
         System.getenv("LKAPP_SIDE_BY_SIDE_RELEASE") == "true"
+val sideBySideDebug = System.getenv("YOMIRU_SIDE_BY_SIDE_DEBUG") == "true"
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
@@ -55,6 +56,9 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
             if (sideBySideRelease) applicationIdSuffix = ".release"
+        }
+        debug {
+            if (sideBySideDebug) applicationIdSuffix = ".debug"
         }
     }
 }

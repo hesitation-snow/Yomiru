@@ -133,6 +133,7 @@ class _ReaderPageState extends State<ReaderPage> {
   LKChapterDetail? _detail;
 
   final _sc = ScrollController();
+  final _shareButtonKey = GlobalKey();
   double _progress = 0;
   double _lastScrollOffset = 0;
 
@@ -1616,10 +1617,20 @@ class _ReaderPageState extends State<ReaderPage> {
     final url =
         'https://www.lightnovel.fun/reader/${widget.bookId}/${widget.chapterId}';
     try {
-      final renderObject = context.findRenderObject();
-      final box = renderObject is RenderBox ? renderObject : null;
+      // iPad 的 UIActivityViewController 使用 popover,必须传入分享按钮
+      // 自身在 controller.view 坐标系中的有效矩形,不能使用页面根 context。
+      final renderObject =
+          _shareButtonKey.currentContext?.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.hasSize) {
+        if (mounted) showLkError(context, '分享按钮暂不可用,请稍后重试');
+        return;
+      }
       final sharePositionOrigin =
-          box == null ? null : box.localToGlobal(Offset.zero) & box.size;
+          renderObject.localToGlobal(Offset.zero) & renderObject.size;
+      if (sharePositionOrigin.isEmpty) {
+        if (mounted) showLkError(context, '分享按钮暂不可用,请稍后重试');
+        return;
+      }
       await Share.share(
         url,
         subject: _title,
@@ -1793,6 +1804,7 @@ class _ReaderPageState extends State<ReaderPage> {
                           ),
                         ),
                         IconButton(
+                          key: _shareButtonKey,
                           tooltip: '分享',
                           icon: Icon(Icons.ios_share_rounded,
                               size: 22, color: _textColor),

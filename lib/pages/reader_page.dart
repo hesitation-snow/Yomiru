@@ -119,6 +119,7 @@ class _ReaderPageState extends State<ReaderPage> {
 
   final _sc = ScrollController();
   double _progress = 0;
+  double _lastScrollOffset = 0;
   /// 滚动进度通知(正文指示器实时刷新,无需整页重建)
   final ValueNotifier<double> _progressN = ValueNotifier<double>(0);
 
@@ -140,14 +141,29 @@ class _ReaderPageState extends State<ReaderPage> {
     super.initState();
     _title = widget.chapterTitle;
     _effectiveVolumeId = widget.volumeId;
-    _sc.addListener(() {
-      if (!_sc.hasClients) return;
-      final max = _sc.position.maxScrollExtent;
-      _progress = max <= 0 ? 1 : (_sc.offset / max).clamp(0.0, 1.0);
-      _progressN.value = _progress;
-    });
+    _sc.addListener(_onScroll);
     _load();
     _loadPrefs();
+  }
+
+  void _onScroll() {
+    if (!_sc.hasClients) return;
+    final offset = _sc.offset;
+    final delta = offset - _lastScrollOffset;
+    _lastScrollOffset = offset;
+    // ListView.builder 的总高度会随着懒加载变化。总高度变化但滚动位置未变
+    // 时不刷新，避免百分比被 maxScrollExtent 的中间值反复拉回。
+    if (delta.abs() < 0.5) return;
+    final max = _sc.position.maxScrollExtent;
+    final raw = max <= 0 ? 1.0 : (offset / max).clamp(0.0, 1.0);
+    // 同一方向滚动时只接受该方向的变化，过滤懒加载造成的反向抖动；
+    // 用户真正反向拖动时，delta 会切换方向，进度仍可正常回退。
+    final next = delta > 0
+        ? (raw > _progress ? raw : _progress)
+        : (raw < _progress ? raw : _progress);
+    if ((next - _progress).abs() < 0.001) return;
+    _progress = next;
+    _progressN.value = next;
   }
 
   @override
@@ -262,6 +278,8 @@ class _ReaderPageState extends State<ReaderPage> {
         _nextTitle = d.nextTitle;
         _nextVolumeId = d.nextVolumeId;
       });
+      _lastScrollOffset = 0;
+      _progressN.value = restore;
       // 滚动模式:跳到上次阅读位置
       // ListView 懒加载下 maxScrollExtent 随构建逐渐增大,
       // 分多次跳转直到接近目标,保证恢复位置准确

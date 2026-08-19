@@ -45,6 +45,8 @@ class _DynamicPageState extends State<DynamicPage> {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (_, i) {
                 final d = _items[i];
+                final hasBook =
+                    d.bookId > 0 && d.bookTitle.trim().isNotEmpty;
                 return InkWell(
                   onTap: () => _showComments(d.dynamicId),
                   onLongPress: () => _actions(d),
@@ -82,7 +84,7 @@ class _DynamicPageState extends State<DynamicPage> {
                           ]),
                           const SizedBox(height: 6),
                           Text(d.summary),
-                          if (d.bookId > 0)
+                          if (hasBook)
                             InkWell(
                               onTap: () => Navigator.push(
                                 context,

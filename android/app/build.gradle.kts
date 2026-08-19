@@ -19,7 +19,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.yutro.yomiru"
+    namespace = "moe.yutro.yomiru"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -29,7 +29,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.yutro.yomiru"
+        applicationId = "moe.yutro.yomiru"
         minSdk = 24
         targetSdk = 35
         versionCode = flutter.versionCode

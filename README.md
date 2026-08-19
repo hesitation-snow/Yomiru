@@ -23,8 +23,8 @@ Yomiru 提供以下基础能力：
 
 当前应用标识：
 
-- Android application ID：`com.yutro.yomiru`
-- iOS Bundle ID：`com.yutro.yomiru`
+- Android application ID：`moe.yutro.yomiru`
+- iOS Bundle ID：`moe.yutro.yomiru`
 - 应用名称：`Yomiru`
 
 ## 本地运行

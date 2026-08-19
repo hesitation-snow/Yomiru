@@ -4,7 +4,7 @@
 
 ## 工程信息
 
-- Bundle ID：`com.yutro.yomiru`
+- Bundle ID：`moe.yutro.yomiru`
 - 应用名称：`Yomiru`
 - 平台工程：`ios/`
 
@@ -23,7 +23,7 @@ flutter build ios --release --no-codesign
 
 ## 发布前检查
 
-- 确认 Apple Developer 后台已注册 `com.yutro.yomiru`。
+- 确认 Apple Developer 后台已注册 `moe.yutro.yomiru`。
 - 使用自己的签名配置，不要把证书、私钥或 provisioning profile 提交到仓库。
 - 发布前确认接口地址、应用名称和隐私说明与实际版本一致。
 - 不要在来源不明的 IPA 中输入账号密码。

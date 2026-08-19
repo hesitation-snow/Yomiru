@@ -1,4 +1,4 @@
-package com.yutro.yomiru
+package moe.yutro.yomiru
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -124,10 +124,51 @@ class _SystemUIBridge extends StatefulWidget {
   State<_SystemUIBridge> createState() => _SystemUIBridgeState();
 }
 
-class _SystemUIBridgeState extends State<_SystemUIBridge> {
+class _SystemUIBridgeState extends State<_SystemUIBridge>
+    with WidgetsBindingObserver {
+  static const _phoneOrientations = <DeviceOrientation>[
+    DeviceOrientation.portraitUp,
+  ];
+  static const _largeScreenOrientations = <DeviceOrientation>[
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ];
+  List<DeviceOrientation>? _appliedOrientations;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeMetrics() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _updateOrientations();
+    });
+  }
+
+  void _updateOrientations() {
+    final orientations = MediaQuery.sizeOf(context).shortestSide >= 600
+        ? _largeScreenOrientations
+        : _phoneOrientations;
+    if (identical(_appliedOrientations, orientations)) return;
+    _appliedOrientations = orientations;
+    SystemChrome.setPreferredOrientations(orientations);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    SystemChrome.setPreferredOrientations(_phoneOrientations);
+    super.dispose();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _updateOrientations();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     SystemChrome.setSystemUIOverlayStyle(isDark
         ? const SystemUiOverlayStyle(

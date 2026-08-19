@@ -17,6 +17,7 @@ import '../api/models.dart';
 import '../api/reader_cache.dart';
 import '../api/store.dart';
 import '../widgets/common.dart';
+import 'login_page.dart';
 import 'search_page.dart';
 
 /// 正文块:文本(可含链接区间)或插画
@@ -91,6 +92,7 @@ class _ReaderPageState extends State<ReaderPage> {
   bool _locked = false;
   bool _unlocked = false;
   bool _loading = true;
+  String? _loadError;
   bool _chrome = true;
 
   /// 章节真实所在卷(详情接口返回,入口传的 volumeId 可能是默认卷,不可靠)
@@ -267,7 +269,10 @@ class _ReaderPageState extends State<ReaderPage> {
   // ==================== 加载与解析 ====================
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     // 上次阅读位置(重新打开本章时自动跳转)
     final savedFrac = await ReaderPrefs.readPosFrac(widget.chapterId);
     final restore = (savedFrac > 0.02 && savedFrac < 0.98) ? savedFrac : 0.0;
@@ -1121,6 +1126,49 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
+  Widget _loadErrorView() {
+    final loggedIn = LKClient.shared.session.isLoggedIn;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_outline_rounded,
+                  size: 42, color: _textColor.withValues(alpha: 0.65)),
+              const SizedBox(height: 14),
+              Text(_loadError ?? '正文暂时无法加载',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: _textColor, fontSize: 15, height: 1.6)),
+              const SizedBox(height: 18),
+              if (!loggedIn)
+                FilledButton.icon(
+                  onPressed: () async {
+                    await Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const LoginPage()));
+                    if (mounted && LKClient.shared.session.isLoggedIn) {
+                      _load();
+                    }
+                  },
+                  icon: const Icon(Icons.login_rounded, size: 18),
+                  label: const Text('去登录'),
+                ),
+              if (!loggedIn) const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _loading ? null : _load,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('重新加载'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// 翻页模式正文(整页左右翻,末页/首页超滑切章)
   Widget _pagedBody(
       double vh, double viewTop, double viewBottom, bool lockedBody) {
@@ -1642,7 +1690,9 @@ class _ReaderPageState extends State<ReaderPage> {
               Positioned.fill(
                 child: _loading
                     ? LkLoadingIndicator(color: _textColor)
-                    : LayoutBuilder(builder: (ctx, cons) {
+                    : _loadError != null
+                        ? _loadErrorView()
+                        : LayoutBuilder(builder: (ctx, cons) {
                         final vw = cons.maxWidth;
                         final vh = cons.maxHeight;
                         // 翻页模式:内容/排版/尺寸变化时重建分页

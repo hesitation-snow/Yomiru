@@ -195,9 +195,12 @@ class LKApi {
   }
 
   static Future<LKChapterDetail> chapterDetail(int bookId, int chapterId) async =>
-      LKChapterDetail.fromJson(
-          await client.post('/api/new-content-read/get-chapter-detail',
-              client.authed({'book_id': bookId, 'chapter_id': chapterId})));
+      LKChapterDetail.fromJson(await client.post(
+          '/api/new-content-read/get-chapter-detail',
+          client.authed({'book_id': bookId, 'chapter_id': chapterId}),
+          accessErrorMessage: client.session.isLoggedIn
+              ? '该正文需要勇者权限才能访问,当前账号可能没有相应权限。'
+              : '该正文可能需要登录或勇者权限才能访问,请先登录;如果登录后仍无法打开,可能是当前账号没有访问权限。'));
 
   static Future<List<LKParagraph>> paragraphs(int bookId, int chapterId) async {
     final d = await client.post('/api/new-content-read/get-chapter-paragraphs',

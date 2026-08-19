@@ -6,6 +6,22 @@ import '../widgets/common.dart';
 import 'reader_page.dart';
 import 'search_page.dart';
 
+Widget _braveAccessBadge(BuildContext context) {
+  final color = Theme.of(context).colorScheme.primary;
+  return Container(
+    margin: const EdgeInsets.only(right: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(color: color.withValues(alpha: 0.35)),
+    ),
+    child: Text('勇者可读',
+        style: TextStyle(
+            color: color, fontSize: 10.5, fontWeight: FontWeight.w600)),
+  );
+}
+
 /// 书籍详情(LightNovelReader 风格):
 /// - 大封面头部 + 状态
 /// - 可点击标签(跳转标签搜索)
@@ -475,6 +491,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 child: Row(children: [
+                  if (c.braveOnly) _braveAccessBadge(context),
                   Expanded(
                     child: Text(c.title,
                         maxLines: 1,
@@ -558,7 +575,13 @@ class _ChaptersPageState extends State<ChaptersPage> {
                 final c = _chapters[i];
                 return ListTile(
                   // 网站标题本身已含"第X章",不再重复拼接
-                  title: Text(c.title),
+                  title: Row(children: [
+                    if (c.braveOnly) _braveAccessBadge(context),
+                    Expanded(
+                      child: Text(c.title,
+                          maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ),
+                  ]),
                   subtitle: Text(c.wordCount >= 10000
                       ? '${(c.wordCount / 10000).toStringAsFixed(1)}万字'
                       : '${c.wordCount}字'),

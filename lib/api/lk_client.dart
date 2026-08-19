@@ -7,7 +7,8 @@ import 'package:http/http.dart' as http;
 class LKException implements Exception {
   final int code;
   final String message;
-  LKException(this.code, this.message);
+  final bool accessRestricted;
+  LKException(this.code, this.message, {this.accessRestricted = false});
   @override
   String toString() =>
       message.isEmpty ? '请求失败(错误码 $code)' : message;
@@ -60,7 +61,8 @@ class LKClient {
   }
 
   /// POST → 校验 code==0 → 返回 data
-  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body,
+      {String? accessErrorMessage}) async {
     late final http.Response resp;
     try {
       resp = await http
@@ -86,7 +88,12 @@ class LKClient {
       final msg = _extractMessage(obj['data']);
       throw LKException(code, msg.isNotEmpty ? msg : _codeHint(code));
     }
-    return (obj['data'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+    final data = obj['data'];
+    if (data is Map<String, dynamic>) return data;
+    if (accessErrorMessage != null) {
+      throw LKException(403, accessErrorMessage, accessRestricted: true);
+    }
+    throw LKException(-1, '响应格式错误');
   }
 
   /// POST → 返回 data(不做模型转换)

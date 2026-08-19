@@ -112,8 +112,12 @@ class LKChapter {
         wordCount: (j['word_count'] as num?)?.toInt() ?? 0,
         locked: (j['locked'] as num?)?.toInt() == 1,
         unlocked: (j['unlocked'] as num?)?.toInt() == 1,
-        accessType: (j['access_type'] as String?) ?? '',
+        accessType: (j['access_type'] as String?) ??
+            (j['accessType'] as String?) ??
+            '',
       );
+
+  bool get braveOnly => accessType.toLowerCase() == 'brave';
 }
 
 class LKChapterDetail {

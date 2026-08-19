@@ -7,7 +7,7 @@ import 'reader_page.dart';
 import 'search_page.dart';
 
 /// 书籍详情(LightNovelReader 风格):
-/// - 大封面头部 + 评分/状态
+/// - 大封面头部 + 状态
 /// - 可点击标签(跳转标签搜索)
 /// - 滚动感知的"继续阅读/开始阅读" FAB
 /// - 卷目录(云进度标记"读到")
@@ -209,19 +209,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                                               color: Colors.grey.shade600)),
                                       const SizedBox(height: 4),
                                       Row(children: [
-                                        if (b.ratingScore > 0) ...[
-                                          Icon(Icons.star_rounded,
-                                              size: 16,
-                                              color: Colors.amber.shade600),
-                                          Text(
-                                            ' ${(b.ratingScore / 10).toStringAsFixed(1)}',
-                                            style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.amber.shade700,
-                                                fontWeight: FontWeight.w600),
-                                          ),
-                                          const SizedBox(width: 10),
-                                        ],
                                         _miniBadge(scheme,
                                             b.isCompleted ? '完结' : '连载'),
                                         const SizedBox(width: 6),

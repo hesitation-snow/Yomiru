@@ -200,14 +200,14 @@ class _SettingsPageState extends State<SettingsPage> {
               title: const Text('关于'),
               onTap: () async {
                 try {
-                  final d = await LKApi.about();
+                  final info = await PackageInfo.fromPlatform();
                   if (!context.mounted) return;
                   showDialog<void>(
                     context: context,
                     builder: (_) => AlertDialog(
                       title: const Text('关于'),
                       content: Text(
-                          '轻之国度 https://www.lightnovel.fun\n版本: ${d['version'] ?? ''}'),
+                          '使用 Flutter 开发的 轻之国度 第三方客户端\n当前版本: ${info.version}+${info.buildNumber}'),
                       actions: [
                         TextButton(
                             onPressed: () => Navigator.pop(context),

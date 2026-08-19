@@ -1,7 +1,7 @@
 name: lkapp
 description: 轻之国度 lightnovel.fun 第三方客户端(基础版)
 publish_to: 'none'
-version: 1.0.1+2
+version: 1.0.2+3
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -20,6 +20,7 @@ dependencies:
   gal: ^2.3.0
   share_plus: ^10.1.0
   package_info_plus: ^8.1.0
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

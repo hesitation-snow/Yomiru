@@ -25,8 +25,10 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _tab = 0;
+
   /// 顶栏/底栏可见比例 0..1,随首页滚动 1:1 伸缩(滑一点露一点)
   double _barFrac = 1.0;
+
   /// 顶栏可伸缩部分的高度(不含状态栏区域)
   static const double _barFlex = 104.0;
 
@@ -102,44 +104,44 @@ class _HomePageState extends State<HomePage> {
               statusBarBrightness: Brightness.light,
             ),
       child: Scaffold(
-      body: Column(
-        children: [
-          // 顶栏:状态栏条固定,搜索框+头像+频道胶囊随滚动向上滑出
-          // (参考 PiliPlus 的让渡式收合);其它 Tab 只留状态栏背景
-          SizedBox(
-            height: padTop,
-            width: double.infinity,
-            child: ColoredBox(
-              color: _tab == 0
-                  ? (isDark ? const Color(0xFF1B1C21) : Colors.white)
-                  : (isDark
-                      ? const Color(0xFF121316)
-                      : const Color(0xFFF6F7FB)),
+        body: Column(
+          children: [
+            // 顶栏:状态栏条固定,搜索框+头像+频道胶囊随滚动向上滑出
+            // (参考 PiliPlus 的让渡式收合);其它 Tab 只留状态栏背景
+            SizedBox(
+              height: padTop,
+              width: double.infinity,
+              child: ColoredBox(
+                color: _tab == 0
+                    ? (isDark ? const Color(0xFF1B1C21) : Colors.white)
+                    : (isDark
+                        ? const Color(0xFF121316)
+                        : const Color(0xFFF6F7FB)),
+              ),
             ),
-          ),
-          SizedBox(
-            height: _tab == 0 ? _barFlex * _barFrac : 0.0,
-            child: Stack(
-              clipBehavior: Clip.hardEdge,
-              children: [
-                Positioned(
-                  top: _tab == 0 ? -_barFlex * (1.0 - _barFrac) : 0.0,
-                  left: 0,
-                  right: 0,
-                  height: _barFlex,
-                  child: ColoredBox(
-                    color: isDark ? const Color(0xFF1B1C21) : Colors.white,
-                    // 用不可滚动的 ScrollView 吸收高度变化中间帧的约束,避免溢出警告
-                    child: SingleChildScrollView(
-                      physics: const NeverScrollableScrollPhysics(),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            child: Row(
-                              children: [
+            SizedBox(
+              height: _tab == 0 ? _barFlex * _barFrac : 0.0,
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Positioned(
+                    top: _tab == 0 ? -_barFlex * (1.0 - _barFrac) : 0.0,
+                    left: 0,
+                    right: 0,
+                    height: _barFlex,
+                    child: ColoredBox(
+                      color: isDark ? const Color(0xFF1B1C21) : Colors.white,
+                      // 用不可滚动的 ScrollView 吸收高度变化中间帧的约束,避免溢出警告
+                      child: SingleChildScrollView(
+                        physics: const NeverScrollableScrollPhysics(),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              child: Row(
+                                children: [
                                   Expanded(
                                     child: InkWell(
                                       borderRadius: BorderRadius.circular(20),
@@ -154,8 +156,7 @@ class _HomePageState extends State<HomePage> {
                                             horizontal: 14),
                                         alignment: Alignment.centerLeft,
                                         decoration: BoxDecoration(
-                                          color: Theme.of(context)
-                                                      .brightness ==
+                                          color: Theme.of(context).brightness ==
                                                   Brightness.dark
                                               ? const Color(0xFF1E2025)
                                               : Colors.grey.shade100,
@@ -167,19 +168,17 @@ class _HomePageState extends State<HomePage> {
                                           children: [
                                             Icon(Icons.search_rounded,
                                                 size: 19,
-                                                color:
-                                                    Colors.grey.shade500),
+                                                color: Colors.grey.shade500),
                                             const SizedBox(width: 8),
                                             Flexible(
                                               child: Text(
                                                 '搜索书名 / 作者',
                                                 maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
+                                                overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
                                                     fontSize: 13.5,
-                                                    color: Colors
-                                                        .grey.shade500),
+                                                    color:
+                                                        Colors.grey.shade500),
                                               ),
                                             ),
                                           ],
@@ -206,28 +205,24 @@ class _HomePageState extends State<HomePage> {
                                       ),
                                       child: CircleAvatar(
                                         radius: 15,
-                                        backgroundColor:
-                                            Colors.indigo.shade100,
-                                        backgroundImage: LKClient.shared
-                                                .session.avatar.isNotEmpty
-                                            ? NetworkImage(LKClient.shared
-                                                .session.avatar)
+                                        backgroundColor: Colors.indigo.shade100,
+                                        backgroundImage: LKClient.shared.session
+                                                .avatar.isNotEmpty
+                                            ? NetworkImage(
+                                                LKClient.shared.session.avatar)
                                             : null,
-                                        child: LKClient.shared
-                                                .session.avatar.isNotEmpty
+                                        child: LKClient.shared.session.avatar
+                                                .isNotEmpty
                                             ? null
                                             : const Icon(Icons.person,
-                                                size: 18,
-                                                color: Colors.indigo),
+                                                size: 18, color: Colors.indigo),
                                       ),
                                     ),
                                   ),
                                   const SizedBox(width: 2),
                                   // 首页排版切换(网格/单列)
                                   IconButton(
-                                    tooltip: _listMode
-                                        ? '切换为网格排版'
-                                        : '切换为单列排版',
+                                    tooltip: _listMode ? '切换为网格排版' : '切换为单列排版',
                                     visualDensity: VisualDensity.compact,
                                     icon: Icon(
                                       _listMode
@@ -236,82 +231,83 @@ class _HomePageState extends State<HomePage> {
                                       size: 21,
                                     ),
                                     onPressed: () {
-                                      setState(
-                                          () => _listMode = !_listMode);
+                                      setState(() => _listMode = !_listMode);
                                       ReaderPrefs.setFeedListMode(_listMode);
                                     },
                                   ),
                                 ],
                               ),
                             ),
-                          // 频道胶囊(热门/最新),随顶栏一起滑出
-                          SizedBox(
-                    height: 40,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.only(
-                          left: 12, right: 12, bottom: 4),
-                      itemCount: _channels.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (_, i) {
-                        final sel = i == _channel;
-                        final scheme = Theme.of(context).colorScheme;
-                        final isDark =
-                            Theme.of(context).brightness == Brightness.dark;
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() => _channel = i);
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 5),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: sel
-                                  ? scheme.primary
-                                  : (isDark
-                                      ? const Color(0xFF2A2C33)
-                                      : Colors.grey.shade100),
-                              borderRadius: BorderRadius.circular(18),
-                              boxShadow: sel
-                                  ? [
-                                      BoxShadow(
-                                          color: scheme.primary
-                                              .withValues(alpha: 0.3),
-                                          blurRadius: 6,
-                                          offset: const Offset(0, 2)),
-                                    ]
-                                  : null,
-                            ),
-                            child: Text(
-                              _channels[i].$2,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: sel
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                                color: sel
-                                    ? Colors.white
-                                    : (isDark
-                                        ? Colors.grey.shade300
-                                        : Colors.grey.shade700),
+                            // 频道胶囊(热门/最新),随顶栏一起滑出
+                            SizedBox(
+                              height: 40,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                padding: const EdgeInsets.only(
+                                    left: 12, right: 12, bottom: 4),
+                                itemCount: _channels.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (_, i) {
+                                  final sel = i == _channel;
+                                  final scheme = Theme.of(context).colorScheme;
+                                  final isDark = Theme.of(context).brightness ==
+                                      Brightness.dark;
+                                  return GestureDetector(
+                                    onTap: () {
+                                      setState(() => _channel = i);
+                                    },
+                                    child: AnimatedContainer(
+                                      duration:
+                                          const Duration(milliseconds: 180),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16, vertical: 5),
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: sel
+                                            ? scheme.primary
+                                            : (isDark
+                                                ? const Color(0xFF2A2C33)
+                                                : Colors.grey.shade100),
+                                        borderRadius: BorderRadius.circular(18),
+                                        boxShadow: sel
+                                            ? [
+                                                BoxShadow(
+                                                    color: scheme.primary
+                                                        .withValues(alpha: 0.3),
+                                                    blurRadius: 6,
+                                                    offset: const Offset(0, 2)),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: Text(
+                                        _channels[i].$2,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: sel
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                          color: sel
+                                              ? Colors.white
+                                              : (isDark
+                                                  ? Colors.grey.shade300
+                                                  : Colors.grey.shade700),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-                    ),
-                  ),
-                ),
-              ],
             ),
-          ),
-          Expanded(
+            Expanded(
               child: NotificationListener<ScrollNotification>(
                 onNotification: (n) {
                   // 顶栏随滚动向上滑出(拖动增量让渡给顶栏)
@@ -335,42 +331,42 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-      bottomNavigationBar: ClipRect(
-        // 底栏随顶栏一起 1:1 伸缩(仅首页;切 Tab 时重置为完整显示)
-        child: SizedBox(
-          height: (64 + MediaQuery.of(context).padding.bottom) * _barFrac,
-          child: SingleChildScrollView(
-            physics: const NeverScrollableScrollPhysics(),
-            child: NavigationBar(
-            selectedIndex: _tab,
-            onDestinationSelected: (i) {
-              setState(() {
-                _tab = i;
-                _barFrac = 1.0;
-              });
-            },
-            destinations: const [
-              NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home),
-                  label: '首页'),
-              NavigationDestination(
-                  icon: Icon(Icons.grid_view_outlined),
-                  selectedIcon: Icon(Icons.grid_view_rounded),
-                  label: '分区'),
-              NavigationDestination(
-                  icon: Icon(Icons.dynamic_feed_outlined),
-                  selectedIcon: Icon(Icons.dynamic_feed),
-                  label: '动态'),
-              NavigationDestination(
-                  icon: Icon(Icons.person_outline),
-                  selectedIcon: Icon(Icons.person),
-                  label: '我的'),
-            ],
+        bottomNavigationBar: ClipRect(
+          // 底栏随顶栏一起 1:1 伸缩(仅首页;切 Tab 时重置为完整显示)
+          child: SizedBox(
+            height: (64 + MediaQuery.of(context).padding.bottom) * _barFrac,
+            child: SingleChildScrollView(
+              physics: const NeverScrollableScrollPhysics(),
+              child: NavigationBar(
+                selectedIndex: _tab,
+                onDestinationSelected: (i) {
+                  setState(() {
+                    _tab = i;
+                    _barFrac = 1.0;
+                  });
+                },
+                destinations: const [
+                  NavigationDestination(
+                      icon: Icon(Icons.home_outlined),
+                      selectedIcon: Icon(Icons.home),
+                      label: '首页'),
+                  NavigationDestination(
+                      icon: Icon(Icons.grid_view_outlined),
+                      selectedIcon: Icon(Icons.grid_view_rounded),
+                      label: '分区'),
+                  NavigationDestination(
+                      icon: Icon(Icons.dynamic_feed_outlined),
+                      selectedIcon: Icon(Icons.dynamic_feed),
+                      label: '动态'),
+                  NavigationDestination(
+                      icon: Icon(Icons.person_outline),
+                      selectedIcon: Icon(Icons.person),
+                      label: '我的'),
+                ],
+              ),
             ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -509,7 +505,12 @@ class _FeedTabState extends State<FeedTab> {
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
       itemCount: _items.length + 1 + (_hasMore ? 1 : 0),
       itemBuilder: (_, i) {
-        if (i == 0) return _HomeRecommendCard(books: _recommendBooks);
+        if (i == 0) {
+          return _HomeRecommendCard(
+            books: _recommendBooks,
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+          );
+        }
         final j = i - 1;
         if (j >= _items.length) {
           WidgetsBinding.instance
@@ -534,8 +535,7 @@ class _FeedTabState extends State<FeedTab> {
 
     final gridView = CustomScrollView(
       slivers: [
-        SliverToBoxAdapter(
-            child: _HomeRecommendCard(books: _recommendBooks)),
+        SliverToBoxAdapter(child: _HomeRecommendCard(books: _recommendBooks)),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
           sliver: SliverGrid(
@@ -544,8 +544,8 @@ class _FeedTabState extends State<FeedTab> {
               (_, i) {
                 if (i >= _items.length) {
                   // 触底加载更多(延迟到帧后,避免 build 期间 setState)
-                  WidgetsBinding.instance.addPostFrameCallback(
-                      (_) => _load(_page + 1, true));
+                  WidgetsBinding.instance
+                      .addPostFrameCallback((_) => _load(_page + 1, true));
                   return const LkLoadingIndicator();
                 }
                 final book = _items[i];
@@ -555,8 +555,7 @@ class _FeedTabState extends State<FeedTab> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) =>
-                            BookDetailPage(bookId: book.bookId)),
+                        builder: (_) => BookDetailPage(bookId: book.bookId)),
                   ),
                 );
               },
@@ -606,15 +605,19 @@ class _FeedTabState extends State<FeedTab> {
 
 class _HomeRecommendCard extends StatelessWidget {
   final List<LKBook> books;
+  final EdgeInsetsGeometry padding;
 
-  const _HomeRecommendCard({required this.books});
+  const _HomeRecommendCard({
+    required this.books,
+    this.padding = const EdgeInsets.fromLTRB(12, 6, 12, 4),
+  });
 
   @override
   Widget build(BuildContext context) {
     if (books.isEmpty) return const SizedBox.shrink();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+      padding: padding,
       child: Material(
         color: isDark ? const Color(0xFF1E2025) : Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -627,18 +630,20 @@ class _HomeRecommendCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                      colors: [Colors.pink.shade300, Colors.deepPurple.shade400]),
+                  gradient: LinearGradient(colors: [
+                    Colors.pink.shade300,
+                    Colors.deepPurple.shade400
+                  ]),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child:
-                    const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 24),
+                child: const Icon(Icons.auto_awesome_rounded,
+                    color: Colors.white, size: 24),
               ),
               const SizedBox(width: 14),
               const Expanded(
                 child: Text('好书推荐',
-                    style: TextStyle(
-                        fontSize: 15.5, fontWeight: FontWeight.w600)),
+                    style:
+                        TextStyle(fontSize: 15.5, fontWeight: FontWeight.w600)),
               ),
             ]),
           ),
@@ -658,8 +663,7 @@ class _HomeRecommendCard extends StatelessWidget {
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) =>
-                              BookDetailPage(bookId: b.bookId)),
+                          builder: (_) => BookDetailPage(bookId: b.bookId)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -706,10 +710,25 @@ class SectionTab extends StatefulWidget {
 
 class _SectionTabState extends State<SectionTab> {
   static const _sections = [
-    (Icons.auto_stories_rounded, '轻小说', '日轻翻译 / 文库本', '/api/bff/home-lightnovel-feed-v1'),
-    (Icons.lightbulb_outline_rounded, '原创', '站内原创作品', '/api/bff/home-original-feed-v1'),
+    (
+      Icons.auto_stories_rounded,
+      '轻小说',
+      '日轻翻译 / 文库本',
+      '/api/bff/home-lightnovel-feed-v1'
+    ),
+    (
+      Icons.lightbulb_outline_rounded,
+      '原创',
+      '站内原创作品',
+      '/api/bff/home-original-feed-v1'
+    ),
     (Icons.groups_2_outlined, '同人', '同人 / 二创', '/api/bff/home-fanfic-feed-v1'),
-    (Icons.menu_book_outlined, 'EPUB', 'EPUB 电子书', '/api/bff/home-epub-feed-v1'),
+    (
+      Icons.menu_book_outlined,
+      'EPUB',
+      'EPUB 电子书',
+      '/api/bff/home-epub-feed-v1'
+    ),
     (Icons.bolt_rounded, '更新', '最近更新', '/api/bff/home-recent-updates-feed-v1'),
   ];
 
@@ -782,8 +801,7 @@ class _SectionTabState extends State<SectionTab> {
     if (items == null || items.isEmpty) return const SizedBox.shrink();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // 高度按字体缩放动态计算,避免 BOTTOM OVERFLOW
-    final titleLine =
-        MediaQuery.textScalerOf(context).scale(12) * 1.3;
+    final titleLine = MediaQuery.textScalerOf(context).scale(12) * 1.3;
     final rowH = 191 + 6 + titleLine * 2 + 10;
     return SizedBox(
       height: rowH,
@@ -803,10 +821,7 @@ class _SectionTabState extends State<SectionTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     CoverImage(
-                        url: b.coverUrl,
-                        width: 143,
-                        height: 191,
-                        radius: 10),
+                        url: b.coverUrl, width: 143, height: 191, radius: 10),
                     const SizedBox(height: 6),
                     Text(
                       b.title,
@@ -857,8 +872,7 @@ class _SectionTabState extends State<SectionTab> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) =>
-                            ChannelPage(path: s.$4, label: s.$2)),
+                        builder: (_) => ChannelPage(path: s.$4, label: s.$2)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
@@ -960,8 +974,8 @@ class _CloudHistoryTabState extends State<CloudHistoryTab> {
           const Text('登录后可同步网页端阅读记录', style: TextStyle(color: Colors.grey)),
           const SizedBox(height: 8),
           FilledButton(
-              onPressed: () => Navigator.push(
-                      context, MaterialPageRoute(builder: (_) => const LoginPage()))
+              onPressed: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const LoginPage()))
                   .then((_) => _load()),
               child: const Text('去登录')),
         ]),
@@ -971,7 +985,8 @@ class _CloudHistoryTabState extends State<CloudHistoryTab> {
       return const LkLoadingIndicator();
     }
     if (_error != null && _items.isEmpty) {
-      return Center(child: Text(_error!, style: const TextStyle(color: Colors.grey)));
+      return Center(
+          child: Text(_error!, style: const TextStyle(color: Colors.grey)));
     }
     return RefreshIndicator(
       onRefresh: _load,
@@ -1020,7 +1035,8 @@ class _CloudHistoryTabState extends State<CloudHistoryTab> {
                   child: Padding(
                     padding: const EdgeInsets.all(10),
                     child: Row(children: [
-                      CoverImage(url: h.coverUrl, width: 50, height: 66, radius: 8),
+                      CoverImage(
+                          url: h.coverUrl, width: 50, height: 66, radius: 8),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -1046,20 +1062,24 @@ class _CloudHistoryTabState extends State<CloudHistoryTab> {
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(4),
                                   child: LinearProgressIndicator(
-                                    value: (h.progressPercent / 100).clamp(0.0, 1.0),
+                                    value: (h.progressPercent / 100)
+                                        .clamp(0.0, 1.0),
                                     minHeight: 5,
-                                    backgroundColor: Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.grey.shade800
-                                        : Colors.grey.shade200,
+                                    backgroundColor:
+                                        Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? Colors.grey.shade800
+                                            : Colors.grey.shade200,
                                   ),
                                 ),
                               const SizedBox(height: 5),
                               Text(
                                 [
-                                  if (h.progressPercent > 0) '进度 ${h.progressPercent}%',
+                                  if (h.progressPercent > 0)
+                                    '进度 ${h.progressPercent}%',
                                   if (h.lastReadAt.isNotEmpty) h.lastReadAt,
-                                  if (h.unreadChapters > 0) '未读 ${h.unreadChapters} 章',
+                                  if (h.unreadChapters > 0)
+                                    '未读 ${h.unreadChapters} 章',
                                 ].join(' · '),
                                 style: TextStyle(
                                     fontSize: 11, color: Colors.grey.shade500),
@@ -1147,20 +1167,20 @@ class _MyTabState extends State<MyTab> {
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(s.isLoggedIn ? s.nickname : '未登录',
-                    style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
-                const SizedBox(height: 3),
-                Text(
-                    s.isLoggedIn
-                        ? 'UID: ${s.uid}'
-                        : '登录后可同步书架、阅读进度、书评与消息',
-                    style: TextStyle(
-                        fontSize: 12, color: Colors.white.withValues(alpha: 0.9))),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s.isLoggedIn ? s.nickname : '未登录',
+                        style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
+                    const SizedBox(height: 3),
+                    Text(s.isLoggedIn ? 'UID: ${s.uid}' : '登录后可同步书架、阅读进度、书评与消息',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.9))),
+                  ]),
             ),
             const Icon(Icons.chevron_right_rounded, color: Colors.white70),
           ]),
@@ -1180,9 +1200,16 @@ class _MyTabState extends State<MyTab> {
             child: const Text('退出登录'),
           ),
         const SizedBox(height: 8),
-        _row(context, Icons.collections_bookmark_outlined, '我的书架',
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShelfPage()))),
-        _row(context, Icons.history_rounded, '阅读历史',
+        _row(
+            context,
+            Icons.collections_bookmark_outlined,
+            '我的书架',
+            () => Navigator.push(
+                context, MaterialPageRoute(builder: (_) => const ShelfPage()))),
+        _row(
+            context,
+            Icons.history_rounded,
+            '阅读历史',
             () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -1190,15 +1217,24 @@ class _MyTabState extends State<MyTab> {
                           appBar: AppBar(title: const Text('阅读历史')),
                           body: const CloudHistoryTab(),
                         )))),
-        _row(context, Icons.chat_bubble_outline, '消息中心',
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MessagesPage()))),
-        _row(context, Icons.settings_outlined, '设置与资料',
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
+        _row(
+            context,
+            Icons.chat_bubble_outline,
+            '消息中心',
+            () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const MessagesPage()))),
+        _row(
+            context,
+            Icons.settings_outlined,
+            '设置与资料',
+            () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const SettingsPage()))),
       ],
     );
   }
 
-  Widget _row(BuildContext context, IconData icon, String title, VoidCallback onTap) {
+  Widget _row(
+      BuildContext context, IconData icon, String title, VoidCallback onTap) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(

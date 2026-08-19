@@ -33,11 +33,22 @@ class LKBook {
   final double ratingScore;
   final String updatedAt;
   LKBook({
-    this.bookId = 0, this.title = '', this.authorName = '', this.coverUrl = '',
-    this.summary = '', this.tags = const [], this.wordCount = 0,
-    this.volumeCount = 0, this.chapterCount = 0, this.defaultVolumeId = 0,
-    this.defaultChapterId = 0, this.serialStatus = '', this.isCompleted = false,
-    this.lastReadChapterTitle = '', this.unreadChapterCount = 0, this.ratingScore = 0,
+    this.bookId = 0,
+    this.title = '',
+    this.authorName = '',
+    this.coverUrl = '',
+    this.summary = '',
+    this.tags = const [],
+    this.wordCount = 0,
+    this.volumeCount = 0,
+    this.chapterCount = 0,
+    this.defaultVolumeId = 0,
+    this.defaultChapterId = 0,
+    this.serialStatus = '',
+    this.isCompleted = false,
+    this.lastReadChapterTitle = '',
+    this.unreadChapterCount = 0,
+    this.ratingScore = 0,
     this.updatedAt = '',
   });
   factory LKBook.fromJson(Map<String, dynamic> j) => LKBook(
@@ -45,10 +56,10 @@ class LKBook {
         title: (j['title'] as String?) ?? '',
         authorName: (j['author_name'] as String?) ?? '',
         coverUrl: (j['cover_url'] as String?) ?? '',
-        summary: (j['summary'] as String?) ??
-            (j['summary_short'] as String?) ??
-            '',
-        tags: (j['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+        summary:
+            (j['summary'] as String?) ?? (j['summary_short'] as String?) ?? '',
+        tags:
+            (j['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
         wordCount: (j['word_count'] as num?)?.toInt() ?? 0,
         volumeCount: (j['volume_count'] as num?)?.toInt() ?? 0,
         chapterCount: (j['chapter_count'] as num?)?.toInt() ?? 0,
@@ -86,8 +97,13 @@ class LKChapter {
   final bool unlocked;
   final String accessType;
   LKChapter({
-    this.chapterId = 0, this.chapterNo = 0, this.title = '', this.wordCount = 0,
-    this.locked = false, this.unlocked = false, this.accessType = '',
+    this.chapterId = 0,
+    this.chapterNo = 0,
+    this.title = '',
+    this.wordCount = 0,
+    this.locked = false,
+    this.unlocked = false,
+    this.accessType = '',
   });
   factory LKChapter.fromJson(Map<String, dynamic> j) => LKChapter(
         chapterId: (j['chapter_id'] as num?)?.toInt() ?? 0,
@@ -117,11 +133,67 @@ class LKChapterDetail {
   final String? nextTitle;
   final int? nextVolumeId;
   LKChapterDetail({
-    this.chapterId = 0, this.volumeId = 0, this.title = '', this.bookTitle = '', this.bodyText = '',
-    this.bodyHtml, this.locked = false, this.unlocked = false, this.coinPrice = 0,
-    this.prevChapterId, this.prevTitle, this.prevVolumeId,
-    this.nextChapterId, this.nextTitle, this.nextVolumeId,
+    this.chapterId = 0,
+    this.volumeId = 0,
+    this.title = '',
+    this.bookTitle = '',
+    this.bodyText = '',
+    this.bodyHtml,
+    this.locked = false,
+    this.unlocked = false,
+    this.coinPrice = 0,
+    this.prevChapterId,
+    this.prevTitle,
+    this.prevVolumeId,
+    this.nextChapterId,
+    this.nextTitle,
+    this.nextVolumeId,
   });
+
+  /// 本地正文缓存专用序列化,不包含登录凭据或其他会话信息。
+  Map<String, dynamic> toCacheJson() => {
+        'chapter_id': chapterId,
+        'volume_id': volumeId,
+        'title': title,
+        'book_title': bookTitle,
+        'body_text': bodyText,
+        'body_html': bodyHtml,
+        'locked': locked,
+        'unlocked': unlocked,
+        'coin_price': coinPrice,
+        'prev_chapter_id': prevChapterId,
+        'prev_title': prevTitle,
+        'prev_volume_id': prevVolumeId,
+        'next_chapter_id': nextChapterId,
+        'next_title': nextTitle,
+        'next_volume_id': nextVolumeId,
+      };
+
+  factory LKChapterDetail.fromCacheJson(Map<String, dynamic> j) =>
+      LKChapterDetail(
+        chapterId: (j['chapter_id'] as num?)?.toInt() ?? 0,
+        volumeId: (j['volume_id'] as num?)?.toInt() ?? 0,
+        title: (j['title'] as String?) ?? '',
+        bookTitle: (j['book_title'] as String?) ?? '',
+        bodyText: (j['body_text'] as String?) ?? '',
+        bodyHtml: j['body_html'] as String?,
+        locked: j['locked'] == true,
+        unlocked: j['unlocked'] == true,
+        coinPrice: (j['coin_price'] as num?)?.toInt() ?? 0,
+        prevChapterId: (j['prev_chapter_id'] as num?)?.toInt(),
+        prevTitle: j['prev_title'] as String?,
+        prevVolumeId: (j['prev_volume_id'] as num?)?.toInt(),
+        nextChapterId: (j['next_chapter_id'] as num?)?.toInt(),
+        nextTitle: j['next_title'] as String?,
+        nextVolumeId: (j['next_volume_id'] as num?)?.toInt(),
+      );
+
+  bool hasSameContent(LKChapterDetail other) =>
+      bodyText == other.bodyText &&
+      bodyHtml == other.bodyHtml &&
+      locked == other.locked &&
+      unlocked == other.unlocked;
+
   factory LKChapterDetail.fromJson(Map<String, dynamic> j) {
     String body = '';
     String? html;
@@ -132,7 +204,9 @@ class LKChapterDetail {
     }
     if (body.isEmpty) {
       final prev = j['render_preview'] as Map<String, dynamic>?;
-      if (prev != null && prev['body_text'] is String) body = prev['body_text'] as String;
+      if (prev != null && prev['body_text'] is String) {
+        body = prev['body_text'] as String;
+      }
     }
     final nav = j['navigation'] as Map<String, dynamic>?;
     // prev_chapter/next_chapter 可能是对象,也可能是数组(服务端形态不一)
@@ -164,10 +238,13 @@ class LKChapterDetail {
       locked: (j['locked'] as num?)?.toInt() == 1,
       unlocked: (j['unlocked'] as num?)?.toInt() == 1,
       coinPrice: (j['coin_price'] as num?)?.toInt() ?? 0,
-      prevChapterId: prev0 != null ? (prev0['chapter_id'] as num?)?.toInt() : null,
+      prevChapterId:
+          prev0 != null ? (prev0['chapter_id'] as num?)?.toInt() : null,
       prevTitle: prev0 != null ? (prev0['title'] as String?) : null,
-      prevVolumeId: prev0 != null ? (prev0['volume_id'] as num?)?.toInt() : null,
-      nextChapterId: next != null ? (next['chapter_id'] as num?)?.toInt() : null,
+      prevVolumeId:
+          prev0 != null ? (prev0['volume_id'] as num?)?.toInt() : null,
+      nextChapterId:
+          next != null ? (next['chapter_id'] as num?)?.toInt() : null,
       nextTitle: next != null ? (next['title'] as String?) : null,
       nextVolumeId: next != null ? (next['volume_id'] as num?)?.toInt() : null,
     );
@@ -179,12 +256,18 @@ class LKParagraph {
   final String hash;
   final int bodyVersion;
   final String text;
-  LKParagraph({this.paragraphNo = 0, this.hash = '', this.bodyVersion = 0, this.text = ''});
+  LKParagraph(
+      {this.paragraphNo = 0,
+      this.hash = '',
+      this.bodyVersion = 0,
+      this.text = ''});
   factory LKParagraph.fromJson(Map<String, dynamic> j) => LKParagraph(
         paragraphNo: (j['paragraph_no'] as num?)?.toInt() ?? 0,
         hash: (j['paragraph_hash'] as String?) ?? '',
         bodyVersion: (j['body_version'] as num?)?.toInt() ?? 0,
-        text: (j['paragraph_text'] as String?) ?? (j['paragraph_excerpt'] as String?) ?? '',
+        text: (j['paragraph_text'] as String?) ??
+            (j['paragraph_excerpt'] as String?) ??
+            '',
       );
 }
 
@@ -230,8 +313,13 @@ class LKComment {
   final String time;
   final bool liked;
   LKComment({
-    this.commentId = 0, this.nickname = '', this.avatar = '', this.content = '',
-    this.likeCount = 0, this.time = '', this.liked = false,
+    this.commentId = 0,
+    this.nickname = '',
+    this.avatar = '',
+    this.content = '',
+    this.likeCount = 0,
+    this.time = '',
+    this.liked = false,
   });
   factory LKComment.fromJson(Map<String, dynamic> j) {
     final author = (j['author'] as Map<String, dynamic>?) ??
@@ -243,9 +331,11 @@ class LKComment {
       commentId: (j['comment_id'] as num?)?.toInt() ?? 0,
       nickname: (author['nickname'] as String?) ?? '',
       avatar: (author['avatar'] as String?) ?? '',
-      content: (j['content'] as String?) ?? (j['content_text'] as String?) ?? '',
+      content:
+          (j['content'] as String?) ?? (j['content_text'] as String?) ?? '',
       likeCount: (j['like_count'] as num?)?.toInt() ?? 0,
-      time: (j['publish_time'] as String?) ?? (j['created_at'] as String?) ?? '',
+      time:
+          (j['publish_time'] as String?) ?? (j['created_at'] as String?) ?? '',
       liked: (j['liked'] as num?)?.toInt() == 1 ||
           (inter['liked'] as num?)?.toInt() == 1,
     );
@@ -264,20 +354,34 @@ class LKHistoryItem {
   final String lastReadAt;
   final int unreadChapters;
   LKHistoryItem({
-    this.bookId = 0, this.title = '', this.authorName = '', this.coverUrl = '',
-    this.volumeId = 0, this.chapterId = 0, this.chapterTitle = '',
-    this.progressPercent = 0, this.lastReadAt = '', this.unreadChapters = 0,
+    this.bookId = 0,
+    this.title = '',
+    this.authorName = '',
+    this.coverUrl = '',
+    this.volumeId = 0,
+    this.chapterId = 0,
+    this.chapterTitle = '',
+    this.progressPercent = 0,
+    this.lastReadAt = '',
+    this.unreadChapters = 0,
   });
   factory LKHistoryItem.fromJson(Map<String, dynamic> j) {
-    final h = (j['history'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final h =
+        (j['history'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
     return LKHistoryItem(
       bookId: (j['book_id'] as num?)?.toInt() ?? 0,
       title: (j['title'] as String?) ?? '',
       authorName: (j['author_name'] as String?) ?? '',
       coverUrl: (j['cover_url'] as String?) ?? '',
-      volumeId: (h['volume_id'] as num?)?.toInt() ?? (j['default_volume_id'] as num?)?.toInt() ?? 0,
-      chapterId: (h['chapter_id'] as num?)?.toInt() ?? (j['last_read_chapter_id'] as num?)?.toInt() ?? 0,
-      chapterTitle: (h['chapter_title'] as String?) ?? (j['last_read_chapter_title'] as String?) ?? '',
+      volumeId: (h['volume_id'] as num?)?.toInt() ??
+          (j['default_volume_id'] as num?)?.toInt() ??
+          0,
+      chapterId: (h['chapter_id'] as num?)?.toInt() ??
+          (j['last_read_chapter_id'] as num?)?.toInt() ??
+          0,
+      chapterTitle: (h['chapter_title'] as String?) ??
+          (j['last_read_chapter_title'] as String?) ??
+          '',
       progressPercent: (h['progress_percent'] as num?)?.toInt() ?? 0,
       lastReadAt: (h['last_read_at'] as String?) ?? '',
       unreadChapters: (j['unread_chapter_count'] as num?)?.toInt() ?? 0,
@@ -299,15 +403,28 @@ class LKDynamicItem {
   final String bookTitle;
   final String bookCover;
   LKDynamicItem({
-    this.dynamicId = 0, this.eventType = '', this.nickname = '', this.avatar = '',
-    this.summary = '', this.likeCount = 0, this.commentCount = 0, this.liked = false,
-    this.time = '', this.bookId = 0, this.bookTitle = '', this.bookCover = '',
+    this.dynamicId = 0,
+    this.eventType = '',
+    this.nickname = '',
+    this.avatar = '',
+    this.summary = '',
+    this.likeCount = 0,
+    this.commentCount = 0,
+    this.liked = false,
+    this.time = '',
+    this.bookId = 0,
+    this.bookTitle = '',
+    this.bookCover = '',
   });
   factory LKDynamicItem.fromJson(Map<String, dynamic> j) {
-    final author = (j['author'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
-    final stats = (j['stats'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
-    final ist = (j['interaction_state'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
-    final brief = (j['target_brief'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final author =
+        (j['author'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final stats =
+        (j['stats'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final ist = (j['interaction_state'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    final brief = (j['target_brief'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
     return LKDynamicItem(
       dynamicId: (j['dynamic_id'] as num?)?.toInt() ?? 0,
       eventType: (j['event_type'] as String?) ?? '',
@@ -318,7 +435,9 @@ class LKDynamicItem {
       commentCount: (stats['comment_count'] as num?)?.toInt() ?? 0,
       liked: (ist['liked'] as num?)?.toInt() == 1,
       time: (j['feed_time'] as String?) ?? (j['publish_time'] as String?) ?? '',
-      bookId: (brief['book_id'] as num?)?.toInt() ?? (brief['target_id'] as num?)?.toInt() ?? 0,
+      bookId: (brief['book_id'] as num?)?.toInt() ??
+          (brief['target_id'] as num?)?.toInt() ??
+          0,
       bookTitle: (brief['title'] as String?) ?? '',
       bookCover: (brief['cover_url'] as String?) ?? '',
     );
@@ -333,17 +452,22 @@ class LKConversation {
   final String lastMessage;
   final int unread;
   LKConversation({
-    this.conversationId = 0, this.peerUid = 0, this.peerName = '',
-    this.peerAvatar = '', this.lastMessage = '', this.unread = 0,
+    this.conversationId = 0,
+    this.peerUid = 0,
+    this.peerName = '',
+    this.peerAvatar = '',
+    this.lastMessage = '',
+    this.unread = 0,
   });
   factory LKConversation.fromJson(Map<String, dynamic> j) {
     final peerRaw = j['peer'] ?? j['user'];
-    final peer = peerRaw is Map<String, dynamic>
-        ? peerRaw
-        : const <String, dynamic>{};
+    final peer =
+        peerRaw is Map<String, dynamic> ? peerRaw : const <String, dynamic>{};
     return LKConversation(
       conversationId: (j['conversation_id'] as num?)?.toInt() ?? 0,
-      peerUid: (j['peer_uid'] as num?)?.toInt() ?? (peer['uid'] as num?)?.toInt() ?? 0,
+      peerUid: (j['peer_uid'] as num?)?.toInt() ??
+          (peer['uid'] as num?)?.toInt() ??
+          0,
       peerName: (peer['nickname'] as String?) ?? '',
       peerAvatar: (peer['avatar'] as String?) ?? '',
       // last_message 是对象 {message_id, preview, sender_uid, time}
@@ -371,11 +495,15 @@ class LKDMMessage {
   final String content;
   final String time;
   bool isMine(int myUid) => senderUid == myUid;
-  LKDMMessage({this.id = 0, this.senderUid = 0, this.content = '', this.time = ''});
+  LKDMMessage(
+      {this.id = 0, this.senderUid = 0, this.content = '', this.time = ''});
   factory LKDMMessage.fromJson(Map<String, dynamic> j) => LKDMMessage(
-        id: (j['id'] as num?)?.toInt() ?? (j['message_id'] as num?)?.toInt() ?? 0,
+        id: (j['id'] as num?)?.toInt() ??
+            (j['message_id'] as num?)?.toInt() ??
+            0,
         senderUid: (j['sender_uid'] as num?)?.toInt() ?? 0,
-        content: (j['content_text'] as String?) ?? (j['content'] as String?) ?? '',
+        content:
+            (j['content_text'] as String?) ?? (j['content'] as String?) ?? '',
         time: (j['created_at'] as String?) ?? '',
       );
 }
@@ -386,7 +514,12 @@ class LKMessageItem {
   final String nickname;
   final String avatar;
   final String time;
-  LKMessageItem({this.title = '', this.content = '', this.nickname = '', this.avatar = '', this.time = ''});
+  LKMessageItem(
+      {this.title = '',
+      this.content = '',
+      this.nickname = '',
+      this.avatar = '',
+      this.time = ''});
   factory LKMessageItem.fromJson(Map<String, dynamic> j) {
     // user 可能是对象、也可能是空数组(如系统消息),安全转换
     final userRaw = j['user'] ?? j['author'];
@@ -394,7 +527,10 @@ class LKMessageItem {
         userRaw is Map<String, dynamic> ? userRaw : const <String, dynamic>{};
     return LKMessageItem(
       title: (j['title'] as String?) ?? '',
-      content: (j['content'] as String?) ?? (j['summary'] as String?) ?? (j['body'] as String?) ?? '',
+      content: (j['content'] as String?) ??
+          (j['summary'] as String?) ??
+          (j['body'] as String?) ??
+          '',
       nickname: (peer['nickname'] as String?) ?? '',
       avatar: (peer['avatar'] as String?) ?? '',
       time: (j['created_at'] as String?) ?? '',

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api/lk_api.dart';
 import '../api/lk_client.dart';
 import '../api/models.dart';
+import '../api/reader_cache.dart';
 import '../api/store.dart';
 import '../widgets/common.dart';
 
@@ -60,7 +61,8 @@ class _DMChatPageState extends State<DMChatPage> {
   Widget build(BuildContext context) {
     final myUid = LKClient.shared.session.uid;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.peerName.isEmpty ? '私信' : widget.peerName)),
+      appBar:
+          AppBar(title: Text(widget.peerName.isEmpty ? '私信' : widget.peerName)),
       body: Column(children: [
         Expanded(
           child: ListView.builder(
@@ -73,7 +75,8 @@ class _DMChatPageState extends State<DMChatPage> {
                 alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   constraints: const BoxConstraints(maxWidth: 280),
                   decoration: BoxDecoration(
                     color: mine
@@ -122,6 +125,43 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  int _readerCacheCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReaderCacheCount();
+  }
+
+  Future<void> _loadReaderCacheCount() async {
+    final count = await ReaderContentCache.count();
+    if (mounted) setState(() => _readerCacheCount = count);
+  }
+
+  Future<void> _clearReaderCache() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('清除正文缓存'),
+        content: Text('将删除本机已缓存的 $_readerCacheCount 章正文，不影响阅读进度。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogCtx, true),
+              child: const Text('清除')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ReaderContentCache.clear();
+    if (!mounted) return;
+    setState(() => _readerCacheCount = 0);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('正文缓存已清除')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final mode = LKStore.themeMode.value;
@@ -133,100 +173,114 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('设置与资料')),
       body: ListView(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
-        children: [
-        ListTile(
-          leading: const Icon(Icons.dark_mode_outlined),
-          title: const Text('深色模式'),
-          subtitle: Text('当前: $modeLabel'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _darkMode(context),
-        ),
-        ListTile(
-          leading: const Icon(Icons.military_tech_outlined),
-          title: const Text('我的勋章(可装备)'),
-          onTap: () => _medals(context),
-        ),
-        ListTile(
-          leading: const Icon(Icons.info_outline),
-          title: const Text('关于'),
-          onTap: () async {
-            try {
-              final d = await LKApi.about();
-              if (!context.mounted) return;
-              showDialog<void>(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: const Text('关于'),
-                  content: Text('轻之国度 https://www.lightnovel.fun\n版本: ${d['version'] ?? ''}'),
-                  actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('好'))],
-                ),
-              );
-            } catch (e) {
-              if (context.mounted) showLkError(context, e);
-            }
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.system_update_outlined),
-          title: const Text('检查更新'),
-          onTap: () async {
-            try {
-              final info = await PackageInfo.fromPlatform();
-              final rel = await LKApi.latestRelease();
-              if (!context.mounted) return;
-              final cur = '${info.version}+${info.buildNumber}';
-              if (rel == null || rel.tag.isEmpty) {
-                showDialog<void>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('检查更新'),
-                    content: Text('当前版本 $cur\n\n无法获取 GitHub 发布信息\n(仓库为私有或暂无发布)'),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('好')),
-                    ],
-                  ),
-                );
-                return;
-              }
-              final latest = rel.tag.replaceFirst(RegExp(r'^v'), '');
-              final newer = compareVersions(latest, info.version) > 0;
-              final body = rel.body.trim();
-              showDialog<void>(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: Text(newer ? '发现新版本' : '已是最新版本'),
-                  content: Text(
-                    newer
-                        ? '当前版本 $cur\n最新版本 $latest\n\n${body.length > 300 ? '${body.substring(0, 300)}…' : body}'
-                        : '当前版本 $cur 已是最新',
-                  ),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('好')),
-                    if (newer)
-                      FilledButton(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          if (rel.url.isNotEmpty) {
-                            await launchUrl(Uri.parse(rel.url),
-                                mode: LaunchMode.externalApplication);
-                          }
-                        },
-                        child: const Text('去 GitHub 下载'),
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
+          children: [
+            ListTile(
+              leading: const Icon(Icons.dark_mode_outlined),
+              title: const Text('深色模式'),
+              subtitle: Text('当前: $modeLabel'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _darkMode(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.military_tech_outlined),
+              title: const Text('我的勋章(可装备)'),
+              onTap: () => _medals(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.offline_bolt_outlined),
+              title: const Text('清除缓存'),
+              subtitle: const Text('如果小说未加载最新更新，可点击这里清理本机正文缓存'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _readerCacheCount == 0 ? null : _clearReaderCache,
+            ),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('关于'),
+              onTap: () async {
+                try {
+                  final d = await LKApi.about();
+                  if (!context.mounted) return;
+                  showDialog<void>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('关于'),
+                      content: Text(
+                          '轻之国度 https://www.lightnovel.fun\n版本: ${d['version'] ?? ''}'),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('好'))
+                      ],
+                    ),
+                  );
+                } catch (e) {
+                  if (context.mounted) showLkError(context, e);
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.system_update_outlined),
+              title: const Text('检查更新'),
+              onTap: () async {
+                try {
+                  final info = await PackageInfo.fromPlatform();
+                  final rel = await LKApi.latestRelease();
+                  if (!context.mounted) return;
+                  final cur = '${info.version}+${info.buildNumber}';
+                  if (rel == null || rel.tag.isEmpty) {
+                    showDialog<void>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text('检查更新'),
+                        content:
+                            Text('当前版本 $cur\n\n无法获取 GitHub 发布信息\n(仓库为私有或暂无发布)'),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('好')),
+                        ],
                       ),
-                  ],
-                ),
-              );
-            } catch (e) {
-              if (context.mounted) showLkError(context, e);
-            }
-          },
-        ),
-      ]),
+                    );
+                    return;
+                  }
+                  final latest = rel.tag.replaceFirst(RegExp(r'^v'), '');
+                  final newer = compareVersions(latest, info.version) > 0;
+                  final body = rel.body.trim();
+                  showDialog<void>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: Text(newer ? '发现新版本' : '已是最新版本'),
+                      content: Text(
+                        newer
+                            ? '当前版本 $cur\n最新版本 $latest\n\n${body.length > 300 ? '${body.substring(0, 300)}…' : body}'
+                            : '当前版本 $cur 已是最新',
+                      ),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('好')),
+                        if (newer)
+                          FilledButton(
+                            onPressed: () async {
+                              Navigator.pop(context);
+                              if (rel.url.isNotEmpty) {
+                                await launchUrl(Uri.parse(rel.url),
+                                    mode: LaunchMode.externalApplication);
+                              }
+                            },
+                            child: const Text('去 GitHub 下载'),
+                          ),
+                      ],
+                    ),
+                  );
+                } catch (e) {
+                  if (context.mounted) showLkError(context, e);
+                }
+              },
+            ),
+          ]),
     );
   }
 
@@ -250,8 +304,7 @@ class _SettingsPageState extends State<SettingsPage> {
               trailing: LKStore.themeMode.value == value
                   ? Icon(Icons.check_circle_rounded,
                       color: Theme.of(context).colorScheme.primary)
-                  : const Icon(Icons.circle_outlined,
-                      color: Colors.grey),
+                  : const Icon(Icons.circle_outlined, color: Colors.grey),
               onTap: () {
                 LKStore.setThemeMode(value);
                 Navigator.pop(sheetCtx);
@@ -267,7 +320,8 @@ class _SettingsPageState extends State<SettingsPage> {
     showModalBottomSheet<void>(
       context: context,
       builder: (_) => FutureBuilder(
-        future: LKApi.client.post('/api/bff/my-medals-v1', LKApi.client.authed()),
+        future:
+            LKApi.client.post('/api/bff/my-medals-v1', LKApi.client.authed()),
         builder: (_, snap) {
           if (snap.connectionState != ConnectionState.done) {
             return const LkLoadingIndicator(minHeight: 200);
@@ -279,7 +333,9 @@ class _SettingsPageState extends State<SettingsPage> {
             children: list.map((m) {
               final name = m['name'] ?? '';
               final equipped = (m['equipped'] as num?)?.toInt() == 1;
-              final id = (m['medal_id'] as num?)?.toInt() ?? (m['id'] as num?)?.toInt() ?? 0;
+              final id = (m['medal_id'] as num?)?.toInt() ??
+                  (m['id'] as num?)?.toInt() ??
+                  0;
               return ListTile(
                 title: Text('$name${equipped ? '(已装备)' : ''}'),
                 onTap: () async {

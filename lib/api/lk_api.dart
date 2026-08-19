@@ -438,10 +438,15 @@ class LKApi {
             headers: const {
               'User-Agent': 'LKFlutter',
               'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
             })
         .timeout(const Duration(seconds: 15));
     if (resp.statusCode == 404) return null; // 尚未发布任何版本
     if (resp.statusCode != 200) {
+      if (resp.statusCode == 403 &&
+          resp.headers['x-ratelimit-remaining'] == '0') {
+        throw LKException(403, 'GitHub 更新接口暂时达到访问限制，请稍后重试');
+      }
       throw LKException(resp.statusCode, '网络异常(HTTP ${resp.statusCode})');
     }
     return LKRelease.fromJson(

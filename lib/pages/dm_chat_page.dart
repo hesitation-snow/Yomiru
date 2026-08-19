@@ -126,6 +126,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   int _readerCacheCount = 0;
+  bool _checkingUpdate = false;
 
   @override
   void initState() {
@@ -160,6 +161,67 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _readerCacheCount = 0);
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('正文缓存已清除')));
+  }
+
+  Future<void> _checkForUpdate() async {
+    if (_checkingUpdate) return;
+    setState(() => _checkingUpdate = true);
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final rel = await LKApi.latestRelease();
+      if (!mounted) return;
+
+      final current = '${info.version}+${info.buildNumber}';
+      if (rel == null || rel.tag.isEmpty) {
+        showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('检查更新'),
+            content: Text('当前版本 $current\n\n暂未找到可用的 GitHub Release，请稍后重试。'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('好')),
+            ],
+          ),
+        );
+        return;
+      }
+
+      final latest = rel.tag.replaceFirst(RegExp(r'^v'), '');
+      final newer = compareVersions(latest, info.version) > 0;
+      final body = rel.body.trim();
+      showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(newer ? '发现新版本' : '已是最新版本'),
+          content: Text(
+            newer
+                ? '当前版本 $current\n最新版本 $latest\n\n${body.length > 300 ? '${body.substring(0, 300)}…' : body}'
+                : '当前版本 $current 已是最新',
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context), child: const Text('好')),
+            if (newer)
+              FilledButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  if (rel.url.isNotEmpty) {
+                    await launchUrl(Uri.parse(rel.url),
+                        mode: LaunchMode.externalApplication);
+                  }
+                },
+                child: const Text('去 GitHub 下载'),
+              ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) showLkError(context, e);
+    } finally {
+      if (mounted) setState(() => _checkingUpdate = false);
+    }
   }
 
   @override
@@ -223,62 +285,15 @@ class _SettingsPageState extends State<SettingsPage> {
             ListTile(
               leading: const Icon(Icons.system_update_outlined),
               title: const Text('检查更新'),
-              onTap: () async {
-                try {
-                  final info = await PackageInfo.fromPlatform();
-                  final rel = await LKApi.latestRelease();
-                  if (!context.mounted) return;
-                  final cur = '${info.version}+${info.buildNumber}';
-                  if (rel == null || rel.tag.isEmpty) {
-                    showDialog<void>(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: const Text('检查更新'),
-                        content:
-                            Text('当前版本 $cur\n\n无法获取 GitHub 发布信息\n(仓库为私有或暂无发布)'),
-                        actions: [
-                          TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('好')),
-                        ],
-                      ),
-                    );
-                    return;
-                  }
-                  final latest = rel.tag.replaceFirst(RegExp(r'^v'), '');
-                  final newer = compareVersions(latest, info.version) > 0;
-                  final body = rel.body.trim();
-                  showDialog<void>(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: Text(newer ? '发现新版本' : '已是最新版本'),
-                      content: Text(
-                        newer
-                            ? '当前版本 $cur\n最新版本 $latest\n\n${body.length > 300 ? '${body.substring(0, 300)}…' : body}'
-                            : '当前版本 $cur 已是最新',
-                      ),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('好')),
-                        if (newer)
-                          FilledButton(
-                            onPressed: () async {
-                              Navigator.pop(context);
-                              if (rel.url.isNotEmpty) {
-                                await launchUrl(Uri.parse(rel.url),
-                                    mode: LaunchMode.externalApplication);
-                              }
-                            },
-                            child: const Text('去 GitHub 下载'),
-                          ),
-                      ],
-                    ),
-                  );
-                } catch (e) {
-                  if (context.mounted) showLkError(context, e);
-                }
-              },
+              subtitle: const Text('检查 GitHub Releases 的最新版本'),
+              trailing: _checkingUpdate
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.chevron_right),
+              onTap: _checkingUpdate ? null : _checkForUpdate,
             ),
           ]),
     );

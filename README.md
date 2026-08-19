@@ -1,8 +1,14 @@
-# Yomiru
+<div align="center">
+    <img width="200" height="200" src="assets/logo.png">
+</div>
 
-一个面向个人学习与兼容性研究的 Flutter 轻小说第三方客户端。
+<div align="center">
+    <h1>Yomiru</h1>
 
-> **非官方声明**：Yomiru 与 `lightnovel.fun` 及其运营方没有隶属、授权或合作关系。项目不提供任何绕过访问控制、签名校验、付费机制或站点限制的功能。
+使用 Flutter 开发的 轻之国度 第三方客户端。
+
+  <img src="assets/screenshot1.jpg" width="20%" alt="home" /><img src="assets/screenshot2.jpg" width="20%" alt="home" /><img src="assets/screenshot3.jpg" width="20%" alt="home" />
+</div>
 
 ## 项目概览
 
@@ -14,18 +20,6 @@ Yomiru 提供以下基础能力：
 - 书评、段评、动态、消息和私信
 - 登录、头像、个人资料与关注
 
-## 技术栈
-
-- Flutter / Dart
-- Android：Kotlin、Android SDK
-- iOS：Xcode、CocoaPods
-- 会话安全存储：Android Keystore / iOS Keychain（通过 `flutter_secure_storage`）
-
-当前应用标识：
-
-- Android application ID：`moe.yutro.yomiru`
-- iOS Bundle ID：`moe.yutro.yomiru`
-- 应用名称：`Yomiru`
 
 ## 本地运行
 
@@ -56,9 +50,9 @@ android/       # Android 平台工程
 ios/           # iOS 平台工程
 ```
 
-## 免责声明
+## 声明
 
-本项目仅用于个人学习、兼容性研究和自用。站点接口、内容和规则可能随时变化，项目不保证持续可用。用户应自行承担账号操作、内容访问和第三方服务使用产生的责任；如收到权利人或服务方的合规要求，应及时停止相关功能并配合处理。
+本项目是个人兴趣而开发，仅用于学习和测试。站点接口、内容和规则可能随时变化，不保证持续可用。所用 API 皆从官方网站收集，项目不提供任何绕过访问控制、签名校验、付费机制或站点限制的功能。用户应自行承担账号操作、内容访问和第三方服务使用产生的责任。
 
 ## License
 

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:lkapp/api/models.dart';
+import 'package:yomiru/api/models.dart';
 
 void main() {
   test('chapter detail cache serialization preserves readable content', () {

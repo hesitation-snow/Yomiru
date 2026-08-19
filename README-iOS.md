@@ -19,9 +19,9 @@ flutter build ios --release --no-codesign
 
 ## GitHub Actions
 
-推送形如 `v1.0.2` 的版本标签后，GitHub Actions 会构建并创建 GitHub Release，包含 Android APK 和 iOS IPA。
+推送形如 `v1.0.3` 的版本标签后，GitHub Actions 会构建并创建 GitHub Release，包含 Android APK 和 iOS IPA。
 
-- Android 优先使用仓库 Secrets 中的正式签名配置；未配置时会使用临时签名密钥，仅适合测试。
+- Android Release 必须使用仓库 Secrets 中配置的正式签名 keystore。
 - iOS 工作流产出未签名 IPA；安装到真机前仍需在 macOS/Xcode 中使用自己的 Apple Developer 签名。
 
 ## 发布前检查

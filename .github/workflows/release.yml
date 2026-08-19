@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag, for example v1.0.2'
+        description: 'Release tag, for example v1.0.3'
         required: true
-        default: v1.0.2
+        default: v1.0.3
 
 permissions:
   contents: write
@@ -58,18 +58,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/yomiru-release.jks
-            store_password="$KEYSTORE_PASSWORD"
-            key_alias="$KEY_ALIAS"
-            key_password="$KEY_PASSWORD"
-          else
-            echo "::warning::ANDROID_KEYSTORE_BASE64 is not configured; generating an ephemeral signing key for this release."
-            store_password="$(openssl rand -hex 16)"
-            key_alias="yomiru-release"
-            key_password="$store_password"
-            keytool -genkeypair -v               -keystore android/app/yomiru-release.jks               -storepass "$store_password"               -keypass "$key_password"               -alias "$key_alias"               -keyalg RSA               -keysize 2048               -validity 10000               -dname "CN=Yomiru, OU=Release, O=Yutro, L=Unknown, ST=Unknown, C=XX"
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Android release signing Secrets are required for a formal release."
+            exit 1
           fi
+
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/yomiru-release.jks
+          store_password="$KEYSTORE_PASSWORD"
+          key_alias="$KEY_ALIAS"
+          key_password="$KEY_PASSWORD"
 
           cat > android/key.properties <<EOF
           storePassword=$store_password
@@ -165,4 +162,4 @@ jobs:
         run: |
           set -euo pipefail
           ls -lh dist
-          gh release create "$RELEASE_TAG" dist/*             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Yomiru $RELEASE_TAG"             --notes "Android release APK and iOS unsigned IPA. Configure the Android signing Secrets for a persistent production signing key; without them, the workflow uses a temporary test key. The iOS IPA must be signed with Apple Developer credentials before device installation."
+          gh release create "$RELEASE_TAG" dist/*             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Yomiru $RELEASE_TAG"             --notes "Android release APK signed with the maintainer-controlled release keystore. The iOS IPA is unsigned and must be signed with Apple Developer credentials before device installation."

@@ -22,7 +22,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "moe.yutro.yomiru"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -48,6 +48,8 @@ android {
 
     buildTypes {
         release {
+            isMinifyEnabled = false
+            isShrinkResources = false
             // 没有正式 keystore 时不配置签名;对应 release 任务会在执行前明确失败。
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")

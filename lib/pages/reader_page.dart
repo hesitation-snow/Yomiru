@@ -328,8 +328,14 @@ class _ReaderPageState extends State<ReaderPage> {
     } catch (e) {
       // 有缓存时网络失败不覆盖正文;只有首次加载失败才显示错误。
       if (initialLoad && mounted) {
+        final accessError = e is LKException && e.accessRestricted;
         setState(() {
-          _blocks = [_BodyBlock.text('加载失败: $e')];
+          if (accessError) {
+            _loadError = e.message;
+            _blocks = const [];
+          } else {
+            _blocks = [_BodyBlock.text('加载失败: $e')];
+          }
           _loading = false;
         });
       }

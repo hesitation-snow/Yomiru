@@ -29,4 +29,21 @@ void main() {
     expect(restricted.accessRestricted, isTrue);
     expect(parseError.accessRestricted, isFalse);
   });
+
+  test('chapter detail tolerates empty list preview from access gate', () {
+    final detail = LKChapterDetail.fromJson({
+      'chapter_id': 262364,
+      'access_type': 'brave',
+      'brave_required': 1,
+      'locked': 1,
+      'unlocked': 0,
+      'body_snapshot': null,
+      'render_preview': <dynamic>[],
+      'navigation': <String, dynamic>{'prev_chapter': <dynamic>[]},
+    });
+
+    expect(detail.bodyText, isEmpty);
+    expect(detail.locked, isTrue);
+    expect(detail.unlocked, isFalse);
+  });
 }

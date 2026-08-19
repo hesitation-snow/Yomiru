@@ -1,5 +1,23 @@
 // 数据模型(手写 fromJson,字段与服务端 snake_case 一一对应)
 
+Map<String, dynamic>? _jsonMap(dynamic value) =>
+    value is Map ? Map<String, dynamic>.from(value) : null;
+
+Map<String, dynamic>? _firstJsonMap(dynamic value) {
+  final direct = _jsonMap(value);
+  if (direct != null) return direct;
+  if (value is List) {
+    for (final item in value) {
+      final map = _jsonMap(item);
+      if (map != null) return map;
+    }
+  }
+  return null;
+}
+
+bool _jsonFlag(dynamic value) =>
+    value == true || value == 1 || value == '1' || value == 'true';
+
 class LKUser {
   final int uid;
   final String nickname;
@@ -201,18 +219,18 @@ class LKChapterDetail {
   factory LKChapterDetail.fromJson(Map<String, dynamic> j) {
     String body = '';
     String? html;
-    final snap = j['body_snapshot'] as Map<String, dynamic>?;
+    final snap = _firstJsonMap(j['body_snapshot']);
     if (snap != null) {
       if (snap['body_text'] is String) body = snap['body_text'] as String;
       if (snap['body_html'] is String) html = snap['body_html'] as String;
     }
     if (body.isEmpty) {
-      final prev = j['render_preview'] as Map<String, dynamic>?;
+      final prev = _firstJsonMap(j['render_preview']);
       if (prev != null && prev['body_text'] is String) {
         body = prev['body_text'] as String;
       }
     }
-    final nav = j['navigation'] as Map<String, dynamic>?;
+    final nav = _jsonMap(j['navigation']);
     // prev_chapter/next_chapter 可能是对象,也可能是数组(服务端形态不一)
     final prevRaw = nav?['prev_chapter'];
     Map<String, dynamic>? prev0;
@@ -239,8 +257,8 @@ class LKChapterDetail {
       bookTitle: (j['book_title'] as String?) ?? '',
       bodyText: body,
       bodyHtml: html,
-      locked: (j['locked'] as num?)?.toInt() == 1,
-      unlocked: (j['unlocked'] as num?)?.toInt() == 1,
+      locked: _jsonFlag(j['locked']),
+      unlocked: _jsonFlag(j['unlocked']),
       coinPrice: (j['coin_price'] as num?)?.toInt() ?? 0,
       prevChapterId:
           prev0 != null ? (prev0['chapter_id'] as num?)?.toInt() : null,

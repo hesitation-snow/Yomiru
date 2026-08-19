@@ -194,13 +194,62 @@ class LKApi {
         .toList();
   }
 
-  static Future<LKChapterDetail> chapterDetail(int bookId, int chapterId) async =>
-      LKChapterDetail.fromJson(await client.post(
-          '/api/new-content-read/get-chapter-detail',
-          client.authed({'book_id': bookId, 'chapter_id': chapterId}),
-          accessErrorMessage: client.session.isLoggedIn
-              ? '该正文需要勇者权限才能访问,当前账号可能没有相应权限。'
-              : '该正文可能需要登录或勇者权限才能访问,请先登录;如果登录后仍无法打开,可能是当前账号没有访问权限。'));
+  static Future<LKChapterDetail> chapterDetail(int bookId, int chapterId) async {
+    final loggedIn = client.session.isLoggedIn;
+    final accessMessage = loggedIn
+        ? '无法阅读\n没有权限访问或者内容已删除'
+        : '该正文可能需要登录或勇者权限才能访问,请先登录;如果登录后仍无法打开,可能是当前账号没有访问权限。';
+    late final Map<String, dynamic> data;
+    try {
+      data = await client.post(
+        '/api/new-content-read/get-chapter-detail',
+        client.authed({'book_id': bookId, 'chapter_id': chapterId}),
+        accessErrorMessage: accessMessage,
+      );
+    } on LKException catch (e) {
+      if (e.code == 403 ||
+          e.message.contains('没有权限') ||
+          e.message.contains('无权限') ||
+          e.message.contains('无法阅读') ||
+          e.message.contains('内容已删除')) {
+        throw LKException(e.code, accessMessage, accessRestricted: true);
+      }
+      rethrow;
+    }
+
+    // 未登录或没有勇者权限时,接口仍可能返回 code=0,但正文区域为空。
+    // 先识别访问状态,避免模型在 render_preview=[] 等形态上强制类型转换。
+    final accessTypeValue = data['access_type'] ?? data['accessType'];
+    final accessType = accessTypeValue is String
+        ? accessTypeValue.toLowerCase()
+        : '';
+    final braveRequired = accessType == 'brave' ||
+        _flag(data['brave_required']) ||
+        _flag(data['braveRequired']);
+    final unlocked = _flag(data['unlocked']);
+    if (!_hasChapterBody(data) && braveRequired && !unlocked) {
+      throw LKException(403, accessMessage, accessRestricted: true);
+    }
+    return LKChapterDetail.fromJson(data);
+  }
+
+  static bool _flag(dynamic value) =>
+      value == true || value == 1 || value == '1' || value == 'true';
+
+  static bool _hasChapterBody(Map<String, dynamic> data) {
+    bool hasBody(dynamic value) {
+      if (value is Map) {
+        final text = value['body_text'];
+        final html = value['body_html'];
+        return (text is String && text.isNotEmpty) ||
+            (html is String && html.isNotEmpty);
+      }
+      if (value is List) return value.any(hasBody);
+      return false;
+    }
+
+    return hasBody(data['body_snapshot']) || hasBody(data['render_preview']);
+  }
 
   static Future<List<LKParagraph>> paragraphs(int bookId, int chapterId) async {
     final d = await client.post('/api/new-content-read/get-chapter-paragraphs',

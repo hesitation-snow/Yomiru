@@ -7,9 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag, for example v1.0.3'
+        description: 'Build label, for example v1.1.0'
         required: true
-        default: v1.0.3
+        default: v1.1.0
+      publish_release:
+        description: 'Publish a GitHub Release after the builds finish'
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -143,6 +148,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
+    if: github.event_name == 'push' || inputs.publish_release == true
     needs:
       - build-android
       - build-ios

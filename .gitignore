@@ -69,3 +69,8 @@ android/app/*.der
 .env.*
 !.env.example
 *.secret
+
+# Cloudflare Worker 本地状态与通知密钥
+telemetry/.wrangler/
+telemetry/.dev.vars
+telemetry/.dev.vars.*

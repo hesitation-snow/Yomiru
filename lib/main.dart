@@ -1,14 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'api/store.dart';
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
+import 'services/anonymous_telemetry.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LKStore.load();
   runApp(const LKApp());
+  // 统计请求独立于界面初始化：网络异常不会影响应用正常打开。
+  unawaited(AnonymousTelemetry.reportFirstActivation());
 }
 
 class LKApp extends StatelessWidget {
@@ -21,7 +26,8 @@ class LKApp extends StatelessWidget {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      scaffoldBackgroundColor: isDark ? const Color(0xFF121316) : const Color(0xFFF6F7FB),
+      scaffoldBackgroundColor:
+          isDark ? const Color(0xFF121316) : const Color(0xFFF6F7FB),
       appBarTheme: AppBarTheme(
         centerTitle: true,
         elevation: 0,
@@ -69,8 +75,9 @@ class LKApp extends StatelessWidget {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: isDark ? const Color(0xFF1B1C21) : Colors.white,
         indicatorColor: scheme.primary.withValues(alpha: 0.16),
-        labelTextStyle: WidgetStatePropertyAll(
-            TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade700)),
+        labelTextStyle: WidgetStatePropertyAll(TextStyle(
+            fontSize: 12,
+            color: isDark ? Colors.grey.shade400 : Colors.grey.shade700)),
         height: 64,
       ),
       dividerTheme: DividerThemeData(
@@ -83,13 +90,15 @@ class LKApp extends StatelessWidget {
         style: FilledButton.styleFrom(
           // 注意:Size.fromHeight 会构造无限宽度,导致 Row 内布局崩溃
           minimumSize: const Size(64, 44),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(64, 44),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );

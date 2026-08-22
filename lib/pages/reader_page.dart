@@ -15,6 +15,7 @@ import '../api/lk_api.dart';
 import '../api/lk_client.dart';
 import '../api/models.dart';
 import '../api/reader_cache.dart';
+import '../api/reading_session.dart';
 import '../api/store.dart';
 import '../widgets/common.dart';
 import 'login_page.dart';
@@ -80,7 +81,7 @@ class ReaderPage extends StatefulWidget {
   State<ReaderPage> createState() => _ReaderPageState();
 }
 
-class _ReaderPageState extends State<ReaderPage> {
+class _ReaderPageState extends State<ReaderPage> with WidgetsBindingObserver {
   String _title = '';
   List<_BodyBlock> _blocks = [_BodyBlock.text('加载中…')];
   int? _prevId;
@@ -137,8 +138,20 @@ class _ReaderPageState extends State<ReaderPage> {
   double _progress = 0;
   double _lastScrollOffset = 0;
 
+  /// 翻页正文文字区域的指针跟踪。
+  /// SelectionArea 会优先处理文字手势，这里用 Listener 旁路记录短按，
+  /// 让点到文字时仍按翻页规则工作，同时保留长按选择复制。
+  Offset? _pagedTextPointerStart;
+  DateTime? _pagedTextPointerDownAt;
+  bool _pagedTextPointerMoved = false;
+  bool _pagedTextPointerHandled = false;
+
   /// 滚动进度通知(正文指示器实时刷新,无需整页重建)
   final ValueNotifier<double> _progressN = ValueNotifier<double>(0);
+  Timer? _readingReportTimer;
+  Future<void>? _readingReportFuture;
+  int _reportedReadingSeconds = 0;
+  bool _finishingReadingSession = false;
 
   static const _presets = [
     (Color(0xFFFFFFFF), Color(0xFF333333), '白'),
@@ -156,6 +169,7 @@ class _ReaderPageState extends State<ReaderPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _title = widget.chapterTitle;
     _effectiveVolumeId = widget.volumeId;
     _sc.addListener(_onScroll);
@@ -181,10 +195,16 @@ class _ReaderPageState extends State<ReaderPage> {
     if ((next - _progress).abs() < 0.001) return;
     _progress = next;
     _progressN.value = next;
+    LKReadingSession.shared
+        .update(volumeId: _effectiveVolumeId, progress: _progress);
   }
 
   @override
   void dispose() {
+    _readingReportTimer?.cancel();
+    LKReadingSession.shared.pause();
+    unawaited(_reportReadingProgress(force: true));
+    WidgetsBinding.instance.removeObserver(this);
     _savePos();
     _sc.dispose();
     _pageController.dispose();
@@ -192,6 +212,120 @@ class _ReaderPageState extends State<ReaderPage> {
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        LKReadingSession.shared.resume();
+        _startReadingReportTimer();
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        LKReadingSession.shared.pause();
+        unawaited(_reportReadingProgress(force: true));
+      case AppLifecycleState.hidden:
+        LKReadingSession.shared.pause();
+        unawaited(_reportReadingProgress(force: true));
+    }
+  }
+
+  void _startReadingReportTimer() {
+    if (_readingReportTimer != null || !LKClient.shared.session.isLoggedIn) {
+      assert(() {
+        debugPrint(
+            '[Yomiru reading] report timer not started: not logged in or already running');
+        return true;
+      }());
+      return;
+    }
+    assert(() {
+      debugPrint('[Yomiru reading] report timer started');
+      return true;
+    }());
+    _readingReportTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      unawaited(_reportReadingProgress());
+    });
+  }
+
+  Future<void> _finishReadingSession() async {
+    if (_finishingReadingSession) return;
+    _finishingReadingSession = true;
+    _readingReportTimer?.cancel();
+    _readingReportTimer = null;
+    LKReadingSession.shared.pause();
+    await _reportReadingProgress(force: true);
+  }
+
+  Future<void> _reportReadingProgress({bool force = false}) async {
+    final existing = _readingReportFuture;
+    if (existing != null) {
+      await existing;
+      return;
+    }
+    final future = _performReadingReport(force: force);
+    _readingReportFuture = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_readingReportFuture, future)) {
+        _readingReportFuture = null;
+      }
+    }
+  }
+
+  Future<void> _performReadingReport({required bool force}) async {
+    if (!LKClient.shared.session.isLoggedIn) return;
+    final snapshot = LKReadingSession.shared.snapshot();
+    if (snapshot == null) {
+      assert(() {
+        debugPrint('[Yomiru reading] report skipped: no active session');
+        return true;
+      }());
+      return;
+    }
+    final unreported = snapshot.readDurationSeconds - _reportedReadingSeconds;
+    if (unreported < (force ? 1 : 15)) {
+      assert(() {
+        debugPrint(
+            '[Yomiru reading] report skipped: ${snapshot.readDurationSeconds}s total, $_reportedReadingSeconds s reported');
+        return true;
+      }());
+      return;
+    }
+    final activeSecondsDelta = unreported > 300 ? 300 : unreported;
+    try {
+      assert(() {
+        debugPrint(
+            '[Yomiru reading] report start: total=${snapshot.readDurationSeconds}s delta=${activeSecondsDelta}s progress=${snapshot.progressPercent}%');
+        return true;
+      }());
+      await LKApi.reportReadingProgress(
+        bookId: snapshot.bookId,
+        volumeId: snapshot.volumeId,
+        chapterId: snapshot.chapterId,
+        progressPercent: snapshot.progressPercent,
+        readDurationSeconds: snapshot.readDurationSeconds,
+        activeSecondsDelta: activeSecondsDelta,
+      );
+      _reportedReadingSeconds += activeSecondsDelta;
+      assert(() {
+        debugPrint('[Yomiru reading] report accepted');
+        return true;
+      }());
+    } catch (_) {
+      // 阅读上报失败不打断阅读；下一次心跳或离开阅读器时重试。
+      assert(() {
+        debugPrint('[Yomiru reading] report failed: $_');
+        return true;
+      }());
+    }
+  }
+
+  Future<bool> _handleWillPop() async {
+    await _finishReadingSession();
+    return true;
   }
 
   /// 保存本章阅读位置(滚动模式按滚动进度,翻页模式按页码进度)
@@ -348,6 +482,19 @@ class _ReaderPageState extends State<ReaderPage> {
     final blocks = await _parseBlocks(d);
     if (!mounted) return;
     _updateDetailState(d, blocks: blocks);
+    if (LKClient.shared.session.isLoggedIn && (!d.locked || d.unlocked)) {
+      LKReadingSession.shared.begin(
+        bookId: widget.bookId,
+        volumeId: d.volumeId > 0 ? d.volumeId : widget.volumeId,
+        chapterId: widget.chapterId,
+      );
+      assert(() {
+        debugPrint(
+            '[Yomiru reading] session started: book=${widget.bookId} chapter=${widget.chapterId}');
+        return true;
+      }());
+      _startReadingReportTimer();
+    }
     if (restorePosition) {
       _lastScrollOffset = 0;
       _progress = restore;
@@ -636,7 +783,9 @@ class _ReaderPageState extends State<ReaderPage> {
     if (pos < clean.length) buf.write(clean.substring(pos));
   }
 
-  void _open(int chapterId, String title, {int? volumeId}) {
+  Future<void> _open(int chapterId, String title, {int? volumeId}) async {
+    await _finishReadingSession();
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -1108,12 +1257,14 @@ class _ReaderPageState extends State<ReaderPage> {
                   lockedBody && b.links.isEmpty && b.text == '(本章暂无内容)';
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Text.rich(
-                  TextSpan(
-                    style: _bodyTextStyle,
-                    children: hint
-                        ? const [TextSpan(text: '本章需要轻币解锁')]
-                        : _spansFor(b),
+                child: SelectionArea(
+                  child: Text.rich(
+                    TextSpan(
+                      style: _bodyTextStyle,
+                      children: hint
+                          ? const [TextSpan(text: '本章需要轻币解锁')]
+                          : _spansFor(b),
+                    ),
                   ),
                 ),
               );
@@ -1148,8 +1299,8 @@ class _ReaderPageState extends State<ReaderPage> {
               const SizedBox(height: 14),
               Text(_loadError ?? '正文暂时无法加载',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: _textColor, fontSize: 15, height: 1.6)),
+                  style:
+                      TextStyle(color: _textColor, fontSize: 15, height: 1.6)),
               const SizedBox(height: 18),
               if (!loggedIn)
                 FilledButton.icon(
@@ -1212,6 +1363,8 @@ class _ReaderPageState extends State<ReaderPage> {
                   ? 1
                   : (i / (_pages.length - 1)).clamp(0.0, 1.0);
             });
+            LKReadingSession.shared
+                .update(volumeId: _effectiveVolumeId, progress: _progress);
           },
           itemBuilder: (_, i) {
             final page = _pages[i];
@@ -1298,14 +1451,23 @@ class _ReaderPageState extends State<ReaderPage> {
                     else
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: Text.rich(
-                          TextSpan(
-                            style: _bodyTextStyle,
-                            children: (lockedBody &&
-                                    it.links.isEmpty &&
-                                    it.text == '(本章暂无内容)')
-                                ? const [TextSpan(text: '本章需要轻币解锁')]
-                                : _spans(it.text, it.links),
+                        child: Listener(
+                          behavior: HitTestBehavior.translucent,
+                          onPointerDown: _pagedTextPointerDown,
+                          onPointerMove: _pagedTextPointerMove,
+                          onPointerUp: _pagedTextPointerUp,
+                          onPointerCancel: _pagedTextPointerCancel,
+                          child: SelectionArea(
+                            child: Text.rich(
+                              TextSpan(
+                                style: _bodyTextStyle,
+                                children: (lockedBody &&
+                                        it.links.isEmpty &&
+                                        it.text == '(本章暂无内容)')
+                                    ? const [TextSpan(text: '本章需要轻币解锁')]
+                                    : _spans(it.text, it.links),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -1481,7 +1643,10 @@ class _ReaderPageState extends State<ReaderPage> {
       out.add(TextSpan(
           text: text.substring(s, e),
           style: linkStyle,
-          recognizer: TapGestureRecognizer()..onTap = () => _openLink(url)));
+          // 翻页模式短按优先翻页；滚动模式仍可直接打开正文链接。
+          recognizer: _paged
+              ? null
+              : (TapGestureRecognizer()..onTap = () => _openLink(url))));
       pos = e;
     }
     if (pos < text.length) out.add(TextSpan(text: text.substring(pos)));
@@ -1619,8 +1784,7 @@ class _ReaderPageState extends State<ReaderPage> {
     try {
       // iPad 的 UIActivityViewController 使用 popover,必须传入分享按钮
       // 自身在 controller.view 坐标系中的有效矩形,不能使用页面根 context。
-      final renderObject =
-          _shareButtonKey.currentContext?.findRenderObject();
+      final renderObject = _shareButtonKey.currentContext?.findRenderObject();
       if (renderObject is! RenderBox || !renderObject.hasSize) {
         if (mounted) showLkError(context, '分享按钮暂不可用,请稍后重试');
         return;
@@ -1655,6 +1819,56 @@ class _ReaderPageState extends State<ReaderPage> {
         curve: Curves.easeOutCubic);
   }
 
+  void _pagedTextPointerDown(PointerDownEvent event) {
+    _pagedTextPointerStart = event.position;
+    _pagedTextPointerDownAt = DateTime.now();
+    _pagedTextPointerMoved = false;
+    _pagedTextPointerHandled = false;
+  }
+
+  void _pagedTextPointerMove(PointerMoveEvent event) {
+    final down = _pagedTextPointerStart;
+    if (down != null && (event.position - down).distance > 12) {
+      _pagedTextPointerMoved = true;
+    }
+  }
+
+  void _pagedTextPointerCancel(PointerCancelEvent event) {
+    _pagedTextPointerStart = null;
+    _pagedTextPointerDownAt = null;
+    _pagedTextPointerMoved = false;
+    _pagedTextPointerHandled = false;
+  }
+
+  void _pagedTextPointerUp(PointerUpEvent event) {
+    final startedAt = _pagedTextPointerDownAt;
+    final moved = _pagedTextPointerMoved;
+    _pagedTextPointerStart = null;
+    _pagedTextPointerDownAt = null;
+    _pagedTextPointerMoved = false;
+    if (startedAt == null || moved) return;
+    // 长按交给 SelectionArea，避免破坏正文复制。
+    if (DateTime.now().difference(startedAt) >
+        const Duration(milliseconds: 350)) {
+      return;
+    }
+
+    _pagedTextPointerHandled = true;
+    // 如果 SelectionArea 赢得手势竞技场，外层 onTapUp 不会触发；
+    // 只让这个标记存活到当前帧，避免下一次点空白区域被误吞。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _pagedTextPointerHandled = false;
+    });
+    final width = MediaQuery.of(context).size.width;
+    if (event.position.dx < width / 3) {
+      _turnPrev();
+    } else if (event.position.dx > width * 2 / 3) {
+      _turnNext();
+    } else if (mounted) {
+      setState(() => _chrome = !_chrome);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final locked = _locked && !_unlocked;
@@ -1665,225 +1879,240 @@ class _ReaderPageState extends State<ReaderPage> {
     final viewTopPadding = _hideBar ? 0.0 : padTop;
     final viewBottomPadding =
         _hideBar ? 0.0 : MediaQuery.of(context).padding.bottom;
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: _isDarkBg ? Brightness.light : Brightness.dark,
-        statusBarBrightness: _isDarkBg ? Brightness.dark : Brightness.light,
-      ),
-      child: Scaffold(
-        backgroundColor: _bgColor,
-        body: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapUp: (d) {
-            final w = MediaQuery.of(context).size.width;
-            if (_paged) {
-              // 翻页模式:左右 1/3 翻页,中间唤出/隐藏工具栏
-              if (d.globalPosition.dx < w / 3) {
-                _turnPrev();
+    // WillPopScope is used so the final reading report can complete before
+    // the reader route is removed.
+    // ignore: deprecated_member_use
+    return WillPopScope(
+      onWillPop: _handleWillPop,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness:
+              _isDarkBg ? Brightness.light : Brightness.dark,
+          statusBarBrightness: _isDarkBg ? Brightness.dark : Brightness.light,
+        ),
+        child: Scaffold(
+          backgroundColor: _bgColor,
+          body: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (d) {
+              final w = MediaQuery.of(context).size.width;
+              if (_paged) {
+                if (_pagedTextPointerHandled) {
+                  _pagedTextPointerHandled = false;
+                  return;
+                }
+                // 翻页模式:左右 1/3 翻页,中间唤出/隐藏工具栏
+                if (d.globalPosition.dx < w / 3) {
+                  _turnPrev();
+                  return;
+                }
+                if (d.globalPosition.dx > w * 2 / 3) {
+                  _turnNext();
+                  return;
+                }
+                setState(() => _chrome = !_chrome);
                 return;
               }
-              if (d.globalPosition.dx > w * 2 / 3) {
-                _turnNext();
-                return;
+              if (_tapTurn) {
+                if (d.globalPosition.dx < w / 3) {
+                  _pageUp();
+                  return;
+                }
+                if (d.globalPosition.dx > w * 2 / 3) {
+                  _pageDown();
+                  return;
+                }
               }
               setState(() => _chrome = !_chrome);
-              return;
-            }
-            if (_tapTurn) {
-              if (d.globalPosition.dx < w / 3) {
-                _pageUp();
-                return;
-              }
-              if (d.globalPosition.dx > w * 2 / 3) {
-                _pageDown();
-                return;
-              }
-            }
-            setState(() => _chrome = !_chrome);
-          },
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: _loading
-                    ? LkLoadingIndicator(color: _textColor)
-                    : _loadError != null
-                        ? _loadErrorView()
-                        : LayoutBuilder(builder: (ctx, cons) {
-                        final vw = cons.maxWidth;
-                        final vh = cons.maxHeight;
-                        // 翻页模式:内容/排版/尺寸变化时重建分页
-                        if (_paged) {
-                          final key = '$_fontSize|$_lineHeight|$_mt|$_mb|'
-                              '$_ml|$_mr|$_autoMargin|${vw.round()}|${vh.round()}|'
-                              '${viewTopPadding.round()}|${viewBottomPadding.round()}|'
-                              '$_locked|$_unlocked|${identical(_blocks, _pagesSource)}';
-                          if (key != _pagedKey) {
-                            _pagedKey = key;
-                            _pagesSource = _blocks;
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) {
-                                _buildPages(vw,
-                                    vh - viewTopPadding - viewBottomPadding);
-                                setState(() {});
+            },
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: _loading
+                      ? LkLoadingIndicator(color: _textColor)
+                      : _loadError != null
+                          ? _loadErrorView()
+                          : LayoutBuilder(builder: (ctx, cons) {
+                              final vw = cons.maxWidth;
+                              final vh = cons.maxHeight;
+                              // 翻页模式:内容/排版/尺寸变化时重建分页
+                              if (_paged) {
+                                final key = '$_fontSize|$_lineHeight|$_mt|$_mb|'
+                                    '$_ml|$_mr|$_autoMargin|${vw.round()}|${vh.round()}|'
+                                    '${viewTopPadding.round()}|${viewBottomPadding.round()}|'
+                                    '$_locked|$_unlocked|${identical(_blocks, _pagesSource)}';
+                                if (key != _pagedKey) {
+                                  _pagedKey = key;
+                                  _pagesSource = _blocks;
+                                  WidgetsBinding.instance
+                                      .addPostFrameCallback((_) {
+                                    if (mounted) {
+                                      _buildPages(
+                                          vw,
+                                          vh -
+                                              viewTopPadding -
+                                              viewBottomPadding);
+                                      setState(() {});
+                                    }
+                                  });
+                                }
+                                return _pagedBody(vh, viewTopPadding,
+                                    viewBottomPadding, lockedBody);
                               }
-                            });
-                          }
-                          return _pagedBody(vh, viewTopPadding,
-                              viewBottomPadding, lockedBody);
-                        }
-                        return _scrollBody(viewTopPadding, viewBottomPadding,
-                            locked, lockedBody);
-                      }),
-              ),
-              if (_indicators && !_chrome && !_loading)
-                Positioned(
-                  top: _hideBar ? 6.0 : padTop + 6,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Text(
-                      _title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: _textColor.withValues(alpha: 0.45)),
+                              return _scrollBody(viewTopPadding,
+                                  viewBottomPadding, locked, lockedBody);
+                            }),
+                ),
+                if (_indicators && !_chrome && !_loading)
+                  Positioned(
+                    top: _hideBar ? 6.0 : padTop + 6,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Text(
+                        _title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: _textColor.withValues(alpha: 0.45)),
+                      ),
                     ),
                   ),
-                ),
-              if (_indicators && !_chrome && !_loading)
-                Positioned(
-                  bottom: 8,
-                  right: 16,
-                  child: _paged
-                      ? Text(
-                          '第 ${_pageIndex + 1}/${_pages.length} 页',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: _textColor.withValues(alpha: 0.45)),
-                        )
-                      : ValueListenableBuilder<double>(
-                          valueListenable: _progressN,
-                          builder: (_, v, __) => Text(
-                            '${(v * 100).toStringAsFixed(1)}%',
+                if (_indicators && !_chrome && !_loading)
+                  Positioned(
+                    bottom: 8,
+                    right: 16,
+                    child: _paged
+                        ? Text(
+                            '第 ${_pageIndex + 1}/${_pages.length} 页',
                             style: TextStyle(
                                 fontSize: 11,
                                 color: _textColor.withValues(alpha: 0.45)),
-                          ),
-                        ),
-                ),
-              // 顶栏
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                top: _chrome ? 0 : -90,
-                left: 0,
-                right: 0,
-                child: Container(
-                  color: barColor,
-                  child: SafeArea(
-                    bottom: false,
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(Icons.chevron_left_rounded,
-                              color: _textColor),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                        Expanded(
-                          child: Text(
-                            _title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: _textColor),
-                          ),
-                        ),
-                        IconButton(
-                          key: _shareButtonKey,
-                          tooltip: '分享',
-                          icon: Icon(Icons.ios_share_rounded,
-                              size: 22, color: _textColor),
-                          onPressed: _share,
-                        ),
-                        IconButton(
-                          tooltip: '本卷评论',
-                          icon: Icon(Icons.chat_bubble_outline_rounded,
-                              size: 22, color: _textColor),
-                          onPressed: _openVolumeComments,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              // 底栏:上一章 / 设置+目录 / 下一章
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                bottom: _chrome ? 0 : -120,
-                left: 0,
-                right: 0,
-                child: Container(
-                  color: barColor,
-                  child: SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          _cornerChapterBtn(Icons.chevron_left_rounded, '上一章',
-                              _prevId != null, () {
-                            if (_prevId != null) {
-                              _open(_prevId!, _prevTitle ?? '',
-                                  volumeId: _prevVolumeId);
-                            }
-                          }),
-                          Expanded(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (_locked && !_unlocked)
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 4),
-                                    child: Icon(Icons.lock_outline_rounded,
-                                        size: 16, color: _textColor),
-                                  ),
-                                IconButton(
-                                  tooltip: '阅读设置',
-                                  icon: Icon(Icons.settings_rounded,
-                                      size: 22, color: _textColor),
-                                  onPressed: _showSettings,
-                                ),
-                                TextButton.icon(
-                                  onPressed: _showCatalog,
-                                  icon: Icon(Icons.menu_book_rounded,
-                                      size: 18, color: _textColor),
-                                  label: Text('目录',
-                                      style: TextStyle(
-                                          fontSize: 13, color: _textColor)),
-                                ),
-                              ],
+                          )
+                        : ValueListenableBuilder<double>(
+                            valueListenable: _progressN,
+                            builder: (_, v, __) => Text(
+                              '${(v * 100).toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: _textColor.withValues(alpha: 0.45)),
                             ),
                           ),
-                          _cornerChapterBtn(Icons.chevron_right_rounded, '下一章',
-                              _nextId != null, () {
-                            if (_nextId != null) {
-                              _open(_nextId!, _nextTitle ?? '',
-                                  volumeId: _nextVolumeId);
-                            }
-                          }),
+                  ),
+                // 顶栏
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  top: _chrome ? 0 : -90,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    color: barColor,
+                    child: SafeArea(
+                      bottom: false,
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: Icon(Icons.chevron_left_rounded,
+                                color: _textColor),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                          Expanded(
+                            child: Text(
+                              _title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: _textColor),
+                            ),
+                          ),
+                          IconButton(
+                            key: _shareButtonKey,
+                            tooltip: '分享',
+                            icon: Icon(Icons.ios_share_rounded,
+                                size: 22, color: _textColor),
+                            onPressed: _share,
+                          ),
+                          IconButton(
+                            tooltip: '本卷评论',
+                            icon: Icon(Icons.chat_bubble_outline_rounded,
+                                size: 22, color: _textColor),
+                            onPressed: _openVolumeComments,
+                          ),
                         ],
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                // 底栏:上一章 / 设置+目录 / 下一章
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  bottom: _chrome ? 0 : -120,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    color: barColor,
+                    child: SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            _cornerChapterBtn(Icons.chevron_left_rounded, '上一章',
+                                _prevId != null, () {
+                              if (_prevId != null) {
+                                _open(_prevId!, _prevTitle ?? '',
+                                    volumeId: _prevVolumeId);
+                              }
+                            }),
+                            Expanded(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_locked && !_unlocked)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 4),
+                                      child: Icon(Icons.lock_outline_rounded,
+                                          size: 16, color: _textColor),
+                                    ),
+                                  IconButton(
+                                    tooltip: '阅读设置',
+                                    icon: Icon(Icons.settings_rounded,
+                                        size: 22, color: _textColor),
+                                    onPressed: _showSettings,
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: _showCatalog,
+                                    icon: Icon(Icons.menu_book_rounded,
+                                        size: 18, color: _textColor),
+                                    label: Text('目录',
+                                        style: TextStyle(
+                                            fontSize: 13, color: _textColor)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _cornerChapterBtn(Icons.chevron_right_rounded,
+                                '下一章', _nextId != null, () {
+                              if (_nextId != null) {
+                                _open(_nextId!, _nextTitle ?? '',
+                                    volumeId: _nextVolumeId);
+                              }
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

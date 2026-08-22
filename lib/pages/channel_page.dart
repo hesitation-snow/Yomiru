@@ -75,60 +75,86 @@ class _ChannelPageState extends State<ChannelPage> {
         actions: [
           IconButton(
             tooltip: _listMode ? '切换网格排版' : '切换单列排版',
-            icon: Icon(
-                _listMode ? Icons.grid_view_rounded : Icons.view_agenda_outlined),
+            icon: Icon(_listMode
+                ? Icons.grid_view_rounded
+                : Icons.view_agenda_outlined),
             onPressed: _toggleListMode,
           ),
         ],
       ),
-      body: _error != null && _items.isEmpty
-          ? Center(child: Text(_error!, style: const TextStyle(color: Colors.grey)))
-          : _listMode
-              ? ListView.builder(
-                  padding: EdgeInsets.fromLTRB(8, 8, 8,
-                      12 + MediaQuery.of(context).padding.bottom),
-                  itemCount: _items.length + (_hasMore ? 1 : 0),
-                  itemBuilder: (_, i) {
-                    if (i >= _items.length) {
-                      WidgetsBinding.instance
-                          .addPostFrameCallback((_) => _load(_page + 1, true));
-                      return const LkLoadingIndicator();
-                    }
-                    final book = _items[i];
-                    return BookCard(
-                      book: book,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                BookDetailPage(bookId: book.bookId)),
+      body: RefreshIndicator(
+        onRefresh: () => _load(1, false),
+        child: _error != null && _items.isEmpty
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.sizeOf(context).height * 0.7,
+                    child: Center(
+                        child: Text(_error!,
+                            style: const TextStyle(color: Colors.grey))),
+                  ),
+                ],
+              )
+            : _loading && _items.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      SizedBox(
+                        height: MediaQuery.sizeOf(context).height * 0.65,
+                        child: const Center(child: LkLoadingIndicator()),
                       ),
-                    );
-                  },
-                )
-              : GridView.builder(
-                  padding: EdgeInsets.fromLTRB(12, 8, 12,
-                      12 + MediaQuery.of(context).padding.bottom),
-                  gridDelegate: bookGridDelegate(),
-                  itemCount: _items.length + (_hasMore ? 1 : 0),
-                  itemBuilder: (_, i) {
-                    if (i >= _items.length) {
-                      WidgetsBinding.instance
-                          .addPostFrameCallback((_) => _load(_page + 1, true));
-                      return const LkLoadingIndicator();
-                    }
-                    final book = _items[i];
-                    return BookGridCard(
-                      book: book,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                BookDetailPage(bookId: book.bookId)),
+                    ],
+                  )
+                : _listMode
+                    ? ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(8, 8, 8,
+                            12 + MediaQuery.of(context).padding.bottom),
+                        itemCount: _items.length + (_hasMore ? 1 : 0),
+                        itemBuilder: (_, i) {
+                          if (i >= _items.length) {
+                            WidgetsBinding.instance.addPostFrameCallback(
+                                (_) => _load(_page + 1, true));
+                            return const LkLoadingIndicator();
+                          }
+                          final book = _items[i];
+                          return BookCard(
+                            book: book,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      BookDetailPage(bookId: book.bookId)),
+                            ),
+                          );
+                        },
+                      )
+                    : GridView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(12, 8, 12,
+                            12 + MediaQuery.of(context).padding.bottom),
+                        gridDelegate: bookGridDelegate(),
+                        itemCount: _items.length + (_hasMore ? 1 : 0),
+                        itemBuilder: (_, i) {
+                          if (i >= _items.length) {
+                            WidgetsBinding.instance.addPostFrameCallback(
+                                (_) => _load(_page + 1, true));
+                            return const LkLoadingIndicator();
+                          }
+                          final book = _items[i];
+                          return BookGridCard(
+                            book: book,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      BookDetailPage(bookId: book.bookId)),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
+      ),
     );
   }
 }
@@ -181,20 +207,23 @@ class _RankPageState extends State<RankPage> {
         actions: [
           IconButton(
             tooltip: _listMode ? '切换网格排版' : '切换单列排版',
-            icon: Icon(
-                _listMode ? Icons.grid_view_rounded : Icons.view_agenda_outlined),
+            icon: Icon(_listMode
+                ? Icons.grid_view_rounded
+                : Icons.view_agenda_outlined),
             onPressed: _toggleListMode,
           ),
         ],
       ),
       body: _error != null && _items.isEmpty
-          ? Center(child: Text(_error!, style: const TextStyle(color: Colors.grey)))
+          ? Center(
+              child: Text(_error!, style: const TextStyle(color: Colors.grey)))
           : RefreshIndicator(
               onRefresh: _load,
               child: _listMode
                   ? ListView.builder(
-                      padding: EdgeInsets.fromLTRB(8, 8, 8,
-                          12 + MediaQuery.of(context).padding.bottom),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(
+                          8, 8, 8, 12 + MediaQuery.of(context).padding.bottom),
                       itemCount: _items.length,
                       itemBuilder: (_, i) {
                         final book = _items[i];
@@ -211,6 +240,7 @@ class _RankPageState extends State<RankPage> {
                       },
                     )
                   : GridView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: EdgeInsets.fromLTRB(12, 8, 12,
                           12 + MediaQuery.of(context).padding.bottom),
                       gridDelegate: bookGridDelegate(),

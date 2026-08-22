@@ -8,13 +8,18 @@ import '../api/lk_api.dart';
 import '../api/lk_client.dart';
 import '../api/models.dart';
 import '../api/store.dart';
+import '../services/avatar_cache.dart';
 import '../widgets/common.dart';
 import 'book_detail_page.dart';
 import 'channel_page.dart';
 import 'dm_chat_page.dart';
 import 'dynamic_page.dart';
+import 'follow_list_page.dart';
 import 'login_page.dart';
+import 'medal_center_page.dart';
 import 'search_page.dart';
+import 'user_profile_page.dart';
+import 'welfare_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -34,8 +39,12 @@ class _HomePageState extends State<HomePage> {
 
   static const _channels = [
     ('hot', '热门', '/api/bff/home-feed-v1'),
-    ('new', '最新', '/api/bff/home-feed-v1'),
+    ('new', '最新', '/api/bff/home-recent-updates-feed-v1'),
     ('rank', '排行榜', 'rank'),
+    ('lightnovel', '轻小说', '/api/bff/home-lightnovel-feed-v1'),
+    ('original', '原创', '/api/bff/home-original-feed-v1'),
+    ('fanfic', '同人', '/api/bff/home-fanfic-feed-v1'),
+    ('epub', 'EPUB', '/api/bff/home-epub-feed-v1'),
   ];
   int _channel = 0;
   bool _listMode = false;
@@ -63,11 +72,12 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() {});
   }
 
-  /// 首页滚动时顶栏向上滑出(参考 PiliPlus):
+  /// 首页滚动时顶栏向上滑出:
   /// 把拖动增量让渡给顶栏,并用 correctBy 抵消内容自身的滚动,
   /// 视觉上顶栏和内容一起向上移动、顶栏从顶部滑出,而不是原地被内容覆盖。
   void _onFeedScroll(ScrollNotification n) {
-    if (_tab != 0) return;
+    // 首页、书架、动态都让底部导航栏跟随内容滚动收合。
+    if (_tab != 0 && _tab != 1 && _tab != 2) return;
     if (n is ScrollUpdateNotification) {
       // 只响应手指拖动;惯性滚动/程序修正产生的通知不参与
       if (n.dragDetails == null) return;
@@ -78,8 +88,11 @@ class _HomePageState extends State<HomePage> {
       final diff = newFrac - _barFrac;
       if (diff == 0) return;
       setState(() => _barFrac = newFrac);
-      // 顶栏吸收的这部分位移从滚动位置里抵消,内容保持跟手
-      Scrollable.of(n.context!).position.correctBy(diff * _barFlex);
+      // 首页的顶部搜索栏需要吸收这部分位移;书架/动态只收合底栏,
+      // 由各自页面决定顶部内容如何滚动,避免同一段滚动被抵消两次。
+      if (_tab == 0) {
+        Scrollable.of(n.context!).position.correctBy(diff * _barFlex);
+      }
     } else if (n is OverscrollNotification) {
       // 顶部下拉回弹:让顶栏跟随露出
       final newFrac = (_barFrac - n.overscroll / _barFlex).clamp(0.0, 1.0);
@@ -107,7 +120,7 @@ class _HomePageState extends State<HomePage> {
         body: Column(
           children: [
             // 顶栏:状态栏条固定,搜索框+头像+频道胶囊随滚动向上滑出
-            // (参考 PiliPlus 的让渡式收合);其它 Tab 只留状态栏背景
+            // 采用让渡式收合;其它 Tab 只留状态栏背景
             SizedBox(
               height: padTop,
               width: double.infinity,
@@ -208,7 +221,7 @@ class _HomePageState extends State<HomePage> {
                                         backgroundColor: Colors.indigo.shade100,
                                         backgroundImage: LKClient.shared.session
                                                 .avatar.isNotEmpty
-                                            ? NetworkImage(
+                                            ? YomiruAvatarCache.provider(
                                                 LKClient.shared.session.avatar)
                                             : null,
                                         child: LKClient.shared.session.avatar
@@ -322,9 +335,14 @@ class _HomePageState extends State<HomePage> {
                       path: _channels[_channel].$3,
                       listMode: _listMode,
                     ),
-                    const SectionTab(),
+                    ShelfPage(embedded: true, listMode: _listMode),
                     const DynamicPage(embedded: true),
-                    const MyTab(),
+                    MyTab(
+                      onOpenShelf: () => setState(() {
+                        _tab = 1;
+                        _barFrac = 1.0;
+                      }),
+                    ),
                   ],
                 ),
               ),
@@ -351,9 +369,9 @@ class _HomePageState extends State<HomePage> {
                       selectedIcon: Icon(Icons.home),
                       label: '首页'),
                   NavigationDestination(
-                      icon: Icon(Icons.grid_view_outlined),
-                      selectedIcon: Icon(Icons.grid_view_rounded),
-                      label: '分区'),
+                      icon: Icon(Icons.bookmark_border_rounded),
+                      selectedIcon: Icon(Icons.bookmark_rounded),
+                      label: '书架'),
                   NavigationDestination(
                       icon: Icon(Icons.dynamic_feed_outlined),
                       selectedIcon: Icon(Icons.dynamic_feed),
@@ -390,7 +408,7 @@ class FeedTab extends StatefulWidget {
 
 class _FeedTabState extends State<FeedTab> {
   final List<dynamic> _items = [];
-  static const _recommendCacheKey = 'home_recommend_v1';
+  static const _recommendCacheKey = 'home_recommend_v2';
   List<LKBook> _recommendBooks = [];
   int _page = 0;
   bool _loading = false;
@@ -399,11 +417,15 @@ class _FeedTabState extends State<FeedTab> {
 
   bool get _isRank => widget.path == 'rank';
   bool get _listMode => widget.listMode;
+  bool get _showRecommend =>
+      widget.channelCode == 'hot' ||
+      widget.channelCode == 'new' ||
+      widget.channelCode == 'rank';
 
   @override
   void initState() {
     super.initState();
-    _loadRecommend();
+    if (_showRecommend) _loadRecommend();
     _load(1, false);
   }
 
@@ -422,7 +444,7 @@ class _FeedTabState extends State<FeedTab> {
       } catch (_) {}
     }
     try {
-      final books = await LKApi.homeRecommend();
+      final books = await LKApi.homeRecommend(pageSize: 8);
       if (!mounted) return;
       if (books.isNotEmpty) setState(() => _recommendBooks = books);
       await p.setString(
@@ -442,6 +464,7 @@ class _FeedTabState extends State<FeedTab> {
   void didUpdateWidget(FeedTab old) {
     super.didUpdateWidget(old);
     if (old.channelCode != widget.channelCode || old.path != widget.path) {
+      if (_showRecommend) _loadRecommend();
       _load(1, false);
     }
   }
@@ -455,9 +478,11 @@ class _FeedTabState extends State<FeedTab> {
     try {
       final items = _isRank
           ? await LKApi.rank(page, pageSize: 20)
-          : (widget.path == '/api/bff/home-feed-v1'
+          : widget.path == '/api/bff/home-feed-v1'
               ? await LKApi.homeFeed(widget.channelCode, page)
-              : await LKApi.channelFeed(widget.path, page));
+              : widget.path == '/api/bff/home-recent-updates-feed-v1'
+                  ? await LKApi.homeRecentUpdatesFeed(page)
+                  : await LKApi.channelFeed(widget.path, page);
       if (!mounted) return;
       setState(() {
         if (append) {
@@ -478,6 +503,12 @@ class _FeedTabState extends State<FeedTab> {
     }
   }
 
+  Future<void> _refresh() async {
+    final requests = <Future<void>>[_load(1, false)];
+    if (_showRecommend) requests.add(_loadRecommend());
+    await Future.wait(requests);
+  }
+
   // 主页排行榜不显示名次,正常展示
   int? _rankOf(int i) => null;
 
@@ -486,32 +517,29 @@ class _FeedTabState extends State<FeedTab> {
     // 注意:IndexedStack 的子组件不能包 Expanded(非法 ParentDataWidget,
     // release 模式会抛类型转换异常导致整个信息流区域空白),直接返回即可。
     if (_error != null && _items.isEmpty) {
-      return _feedHint(
-          icon: Icons.wifi_off_rounded,
-          text: _error!,
-          onRetry: () => _load(1, false));
+      return _refreshableHint(icon: Icons.wifi_off_rounded, text: _error!);
     }
     if (_items.isEmpty && _loading) {
-      return const LkLoadingIndicator();
+      return const SizedBox.expand(child: LkLoadingIndicator());
     }
     if (_items.isEmpty) {
-      return _feedHint(
-          icon: Icons.inbox_outlined,
-          text: '没有获取到内容,请点击重试',
-          onRetry: () => _load(1, false));
+      return _refreshableHint(
+          icon: Icons.inbox_outlined, text: '没有获取到内容,请点击重试');
     }
 
+    final recommendCount = _showRecommend ? 1 : 0;
     final listView = ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
-      itemCount: _items.length + 1 + (_hasMore ? 1 : 0),
+      itemCount: _items.length + recommendCount + (_hasMore ? 1 : 0),
       itemBuilder: (_, i) {
-        if (i == 0) {
+        if (_showRecommend && i == 0) {
           return _HomeRecommendCard(
             books: _recommendBooks,
             padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
           );
         }
-        final j = i - 1;
+        final j = i - recommendCount;
         if (j >= _items.length) {
           WidgetsBinding.instance
               .addPostFrameCallback((_) => _load(_page + 1, true));
@@ -534,8 +562,10 @@ class _FeedTabState extends State<FeedTab> {
     );
 
     final gridView = CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        SliverToBoxAdapter(child: _HomeRecommendCard(books: _recommendBooks)),
+        if (_showRecommend)
+          SliverToBoxAdapter(child: _HomeRecommendCard(books: _recommendBooks)),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
           sliver: SliverGrid(
@@ -566,9 +596,29 @@ class _FeedTabState extends State<FeedTab> {
       ],
     );
 
-    return Stack(children: [
-      Positioned.fill(child: _listMode ? listView : gridView),
-    ]);
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: _listMode ? listView : gridView,
+    );
+  }
+
+  Widget _refreshableHint({required IconData icon, required String text}) {
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.7,
+            child: _feedHint(
+              icon: icon,
+              text: text,
+              onRetry: () => _refresh(),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 首页信息流的错误/空状态提示(带重试)
@@ -729,12 +779,12 @@ class _SectionTabState extends State<SectionTab> {
       'EPUB 电子书',
       '/api/bff/home-epub-feed-v1'
     ),
-    (Icons.bolt_rounded, '更新', '最近更新', '/api/bff/home-recent-updates-feed-v1'),
   ];
 
   /// path -> 分区内最新 3 部(先读本地缓存,再后台刷新并写回)
   final Map<String, List<LKBook>> _latest = {};
   bool _refreshed = false;
+  bool _refreshing = false;
 
   @override
   void initState() {
@@ -767,18 +817,24 @@ class _SectionTabState extends State<SectionTab> {
 
   /// 后台刷新每个分区的最新 5 部,并保存到本地
   Future<void> _refreshAll() async {
+    if (_refreshing) return;
+    _refreshing = true;
     final p = await SharedPreferences.getInstance();
-    for (final s in _sections) {
-      try {
-        final items = await LKApi.channelFeed(s.$4, 1, pageSize: 5);
-        final top = items.take(5).toList();
-        if (!mounted) return;
-        setState(() => _latest[s.$4] = top);
-        await p.setString(
-            _cacheKey(s.$4), jsonEncode(top.map(_bookJson).toList()));
-      } catch (_) {}
+    try {
+      for (final s in _sections) {
+        try {
+          final items = await LKApi.channelFeed(s.$4, 1, pageSize: 5);
+          final top = items.take(5).toList();
+          if (!mounted) return;
+          setState(() => _latest[s.$4] = top);
+          await p.setString(
+              _cacheKey(s.$4), jsonEncode(top.map(_bookJson).toList()));
+        } catch (_) {}
+      }
+      if (mounted) setState(() => _refreshed = true);
+    } finally {
+      _refreshing = false;
     }
-    if (mounted) setState(() => _refreshed = true);
   }
 
   static Map<String, dynamic> _bookJson(LKBook b) => {
@@ -846,82 +902,86 @@ class _SectionTabState extends State<SectionTab> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text('分区',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : const Color(0xFF263238))),
-        const SizedBox(height: 4),
-        Text('按类型浏览作品,每类附最新五部',
-            style: TextStyle(fontSize: 12.5, color: Colors.grey.shade500)),
-        const SizedBox(height: 14),
-        ..._sections.map((s) {
-          final latest = _latest[s.$4];
-          final loading = (latest == null || latest.isEmpty) && !_refreshed;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Material(
-              color: isDark ? const Color(0xFF1E2025) : Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              clipBehavior: Clip.antiAlias,
-              child: Column(children: [
-                InkWell(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => ChannelPage(path: s.$4, label: s.$2)),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: scheme.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
+    return RefreshIndicator(
+      onRefresh: _refreshAll,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text('分区',
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : const Color(0xFF263238))),
+          const SizedBox(height: 4),
+          Text('按类型浏览作品,每类附最新五部',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade500)),
+          const SizedBox(height: 14),
+          ..._sections.map((s) {
+            final latest = _latest[s.$4];
+            final loading = (latest == null || latest.isEmpty) && !_refreshed;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Material(
+                color: isDark ? const Color(0xFF1E2025) : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                clipBehavior: Clip.antiAlias,
+                child: Column(children: [
+                  InkWell(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => ChannelPage(path: s.$4, label: s.$2)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: scheme.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(s.$1, color: scheme.primary, size: 24),
                         ),
-                        child: Icon(s.$1, color: scheme.primary, size: 24),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(s.$2,
-                                  style: const TextStyle(
-                                      fontSize: 15.5,
-                                      fontWeight: FontWeight.w600)),
-                              Text(s.$3,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade500)),
-                            ]),
-                      ),
-                      Icon(Icons.chevron_right_rounded,
-                          color: Colors.grey.shade400),
-                    ]),
-                  ),
-                ),
-                if (latest != null && latest.isNotEmpty) _latestRow(s.$4),
-                if (loading)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 14),
-                    child: LkLoadingIndicator(
-                      minHeight: 32,
-                      size: 16,
-                      strokeWidth: 2,
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(s.$2,
+                                    style: const TextStyle(
+                                        fontSize: 15.5,
+                                        fontWeight: FontWeight.w600)),
+                                Text(s.$3,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade500)),
+                              ]),
+                        ),
+                        Icon(Icons.chevron_right_rounded,
+                            color: Colors.grey.shade400),
+                      ]),
                     ),
                   ),
-              ]),
-            ),
-          );
-        }),
-        // (排行榜已移到首页频道:热门 / 最新 / 排行榜)
-      ],
+                  if (latest != null && latest.isNotEmpty) _latestRow(s.$4),
+                  if (loading)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 14),
+                      child: LkLoadingIndicator(
+                        minHeight: 32,
+                        size: 16,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                ]),
+              ),
+            );
+          }),
+          // (排行榜已移到首页频道:热门 / 最新 / 排行榜)
+        ],
+      ),
     );
   }
 }
@@ -982,7 +1042,7 @@ class _CloudHistoryTabState extends State<CloudHistoryTab> {
       );
     }
     if (_loading && _items.isEmpty) {
-      return const LkLoadingIndicator();
+      return const SizedBox.expand(child: LkLoadingIndicator());
     }
     if (_error != null && _items.isEmpty) {
       return Center(
@@ -991,6 +1051,7 @@ class _CloudHistoryTabState extends State<CloudHistoryTab> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         itemCount: _items.length,
         separatorBuilder: (_, __) => const SizedBox(height: 2),
         itemBuilder: (_, i) {
@@ -1101,18 +1162,27 @@ class _CloudHistoryTabState extends State<CloudHistoryTab> {
 // ==================== 我的 ====================
 
 class MyTab extends StatefulWidget {
-  const MyTab({super.key});
+  final VoidCallback? onOpenShelf;
+
+  const MyTab({super.key, this.onOpenShelf});
 
   @override
   State<MyTab> createState() => _MyTabState();
 }
 
 class _MyTabState extends State<MyTab> {
+  LKMyProfile? _profile;
+  List<LKMedal> _medals = const [];
+  bool _profileLoading = false;
+  String? _profileError;
+  int _profileRequest = 0;
+
   @override
   void initState() {
     super.initState();
     // 登录/登出后刷新用户卡片
     LKClient.sessionRev.addListener(_onRev);
+    _reloadProfile();
   }
 
   @override
@@ -1122,68 +1192,164 @@ class _MyTabState extends State<MyTab> {
   }
 
   void _onRev() {
+    _reloadProfile();
     if (mounted) setState(() {});
+  }
+
+  Future<void> _reloadProfile() async {
+    final session = LKClient.shared.session;
+    final request = ++_profileRequest;
+    if (!session.isLoggedIn) {
+      if (mounted) {
+        setState(() {
+          _profile = null;
+          _medals = const [];
+          _profileLoading = false;
+          _profileError = null;
+        });
+      }
+      return;
+    }
+    final cachedProfile = await LKStore.cachedMyProfile(session.uid);
+    final cachedMedals = await LKStore.cachedMedals(session.uid);
+    if (!mounted || request != _profileRequest) return;
+    setState(() {
+      if (cachedProfile != null) _profile = cachedProfile;
+      _medals = cachedMedals ?? cachedProfile?.medals ?? const [];
+      _profileLoading = true;
+      _profileError = null;
+    });
+    try {
+      final profile = await LKApi.myProfile();
+      if (mounted) {
+        YomiruAvatarCache.precache(context, [profile.avatar, session.avatar]);
+      }
+      var medals = profile.medals;
+      try {
+        final loaded = await LKApi.myMedals();
+        medals = loaded;
+        await LKStore.cacheMedals(session.uid, loaded);
+      } catch (_) {
+        // 用户资料已加载时，勋章接口失败不影响页面其余内容。
+        if (cachedMedals != null) medals = cachedMedals;
+        if (medals.isNotEmpty) {
+          await LKStore.cacheMedals(session.uid, medals);
+        }
+      }
+      await LKStore.cacheMyProfile(session.uid, profile);
+      if (!mounted || request != _profileRequest) return;
+      setState(() {
+        _profile = profile;
+        _medals = medals;
+        _profileLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || request != _profileRequest) return;
+      setState(() {
+        _profileLoading = false;
+        _profileError = _profile == null ? '个人资料加载失败，点击重试' : null;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final s = LKClient.shared.session;
+    final scheme = Theme.of(context).colorScheme;
+    final profile = _profile;
+    final avatar =
+        profile?.avatar.isNotEmpty == true ? profile!.avatar : s.avatar;
+    final nickname =
+        profile?.nickname.isNotEmpty == true ? profile!.nickname : s.nickname;
+    final profileUid = profile != null && profile.uid > 0 ? profile.uid : s.uid;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // 头部卡片
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Colors.indigo.shade400, Colors.indigo.shade600],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.indigo.shade200.withValues(alpha: 0.5),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4)),
+        // 用户主页资料卡:用户信息、统计入口和勋章统一放在同一张卡片内。
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              InkWell(
+                onTap: s.isLoggedIn && profileUid > 0
+                    ? () => openUserProfile(context, profileUid)
+                    : null,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Row(children: [
+                        Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: scheme.outline.withValues(alpha: 0.55),
+                                width: 2),
+                          ),
+                          child: CircleAvatar(
+                            radius: 28,
+                            backgroundColor: scheme.surfaceContainerHighest,
+                            backgroundImage: avatar.isNotEmpty
+                                ? YomiruAvatarCache.provider(avatar)
+                                : null,
+                            child: avatar.isEmpty
+                                ? Icon(Icons.person,
+                                    size: 30, color: scheme.onSurfaceVariant)
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(s.isLoggedIn ? nickname : '未登录',
+                                    style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: scheme.onSurface)),
+                                const SizedBox(height: 3),
+                                Text(
+                                    s.isLoggedIn
+                                        ? 'UID: ${s.uid}'
+                                        : '登录后可同步书架、阅读进度、书评与消息',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: scheme.onSurfaceVariant)),
+                              ]),
+                        ),
+                        Icon(Icons.chevron_right_rounded,
+                            color: scheme.onSurfaceVariant),
+                      ]),
+                      if (s.isLoggedIn && _medals.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _headerMedalStrip(_medals),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              if (s.isLoggedIn) ...[
+                Divider(height: 1, color: scheme.outlineVariant),
+                if (_profileLoading && profile == null)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                if (profile != null) _profileSummary(profile),
+                if (_profileError != null && profile == null)
+                  ListTile(
+                    leading: const Icon(Icons.info_outline),
+                    title: Text(_profileError!),
+                    trailing: TextButton(
+                      onPressed: _reloadProfile,
+                      child: const Text('重试'),
+                    ),
+                  ),
+              ],
             ],
           ),
-          child: Row(children: [
-            Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white70, width: 2),
-              ),
-              child: CircleAvatar(
-                radius: 28,
-                backgroundColor: Colors.white24,
-                backgroundImage:
-                    s.avatar.isNotEmpty ? NetworkImage(s.avatar) : null,
-                child: s.avatar.isEmpty
-                    ? const Icon(Icons.person, size: 30, color: Colors.white)
-                    : null,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(s.isLoggedIn ? s.nickname : '未登录',
-                        style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white)),
-                    const SizedBox(height: 3),
-                    Text(s.isLoggedIn ? 'UID: ${s.uid}' : '登录后可同步书架、阅读进度、书评与消息',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.9))),
-                  ]),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white70),
-          ]),
         ),
         const SizedBox(height: 16),
         if (!s.isLoggedIn)
@@ -1191,42 +1357,33 @@ class _MyTabState extends State<MyTab> {
             onPressed: () => Navigator.push(
                 context, MaterialPageRoute(builder: (_) => const LoginPage())),
             child: const Text('登录 / 注册'),
-          )
-        else
-          OutlinedButton(
-            onPressed: () => Navigator.push(
-                context, MaterialPageRoute(builder: (_) => const LoginPage())),
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent),
-            child: const Text('退出登录'),
           ),
         const SizedBox(height: 8),
-        _row(
-            context,
-            Icons.collections_bookmark_outlined,
-            '我的书架',
-            () => Navigator.push(
-                context, MaterialPageRoute(builder: (_) => const ShelfPage()))),
-        _row(
-            context,
-            Icons.history_rounded,
-            '阅读历史',
-            () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => Scaffold(
-                          appBar: AppBar(title: const Text('阅读历史')),
-                          body: const CloudHistoryTab(),
-                        )))),
-        _row(
-            context,
-            Icons.chat_bubble_outline,
-            '消息中心',
-            () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const MessagesPage()))),
+        if (s.isLoggedIn)
+          _row(
+              context,
+              Icons.card_giftcard_outlined,
+              '任务中心',
+              () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const WelfarePage()))),
+        if (s.isLoggedIn)
+          _row(
+              context,
+              Icons.chat_bubble_outline,
+              '消息中心',
+              () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const MessagesPage()))),
+        if (s.isLoggedIn)
+          _row(
+              context,
+              Icons.military_tech_outlined,
+              '勋章中心',
+              () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const MedalCenterPage()))),
         _row(
             context,
             Icons.settings_outlined,
-            '设置与资料',
+            '设置',
             () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const SettingsPage()))),
       ],
@@ -1234,15 +1391,154 @@ class _MyTabState extends State<MyTab> {
   }
 
   Widget _row(
-      BuildContext context, IconData icon, String title, VoidCallback onTap) {
+      BuildContext context, IconData icon, String title, VoidCallback onTap,
+      {String? subtitle}) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: Icon(icon),
         title: Text(title),
+        subtitle: subtitle == null ? null : Text(subtitle),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
       ),
+    );
+  }
+
+  void _showMedalName(String name) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(name.isEmpty ? '未知勋章' : name)),
+    );
+  }
+
+  Widget _profileSummary(LKMyProfile profile) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _profileChip(Icons.workspace_premium_outlined,
+                  profile.levelName.isEmpty ? '等级未知' : profile.levelName),
+              _profileChip(
+                  Icons.monetization_on_outlined, '${profile.coin} 轻币'),
+              _profileChip(
+                profile.isBrave ? Icons.shield_outlined : Icons.person_outline,
+                profile.isBrave ? '勇者' : '普通用户',
+                color: profile.isBrave ? Colors.deepOrange : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _profileAction(
+                '粉丝',
+                profile.followersCount,
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const FollowListPage(initialTab: 1)),
+                ),
+              ),
+              _profileAction(
+                '关注',
+                profile.followingCount,
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FollowListPage()),
+                ),
+              ),
+              _profileAction(
+                '书架',
+                profile.bookshelfCount,
+                widget.onOpenShelf ??
+                    () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ShelfPage()),
+                        ),
+              ),
+              _profileAction(
+                '历史',
+                profile.historyCount,
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => Scaffold(
+                      appBar: AppBar(title: const Text('阅读历史')),
+                      body: const CloudHistoryTab(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileAction(String label, int? value, VoidCallback onTap) {
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            children: [
+              Text(value == null ? '—' : '$value',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 2),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _headerMedalStrip(List<LKMedal> medals) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        children: medals.take(5).map((medal) {
+          return Tooltip(
+            message: medal.name,
+            child: GestureDetector(
+              onTap: () => _showMedalName(medal.name),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                backgroundImage: medal.image.isNotEmpty
+                    ? YomiruAvatarCache.provider(medal.image)
+                    : null,
+                child: medal.image.isEmpty
+                    ? const Icon(Icons.military_tech, size: 18)
+                    : null,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _profileChip(IconData icon, String label, {Color? color}) {
+    return Chip(
+      avatar: Icon(icon, size: 18, color: color),
+      label: Text(label),
+      visualDensity: VisualDensity.compact,
     );
   }
 }

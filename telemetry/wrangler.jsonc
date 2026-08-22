@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "yomiru-telemetry",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-21",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "yomiru-telemetry",
+      "database_id": "f4ba07dd-28b7-411e-a0d1-e457d0ff4837"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "telemetry.yutro.uk",
+      "custom_domain": true
+    }
+  ]
+}

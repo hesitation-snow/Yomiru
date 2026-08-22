@@ -1,13 +1,17 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'lk_client.dart';
+import 'models.dart';
 
 /// 会话与主题持久化
 class LKStore {
   /// 主题模式(ValueNotifier 让 MaterialApp 即时切换)
-  static final ValueNotifier<ThemeMode> themeMode = ValueNotifier(ThemeMode.system);
+  static final ValueNotifier<ThemeMode> themeMode =
+      ValueNotifier(ThemeMode.system);
   static const FlutterSecureStorage _secure = FlutterSecureStorage();
 
   static Future<void> load() async {
@@ -60,13 +64,206 @@ class LKStore {
 
   static Future<void> clear() async {
     final p = await SharedPreferences.getInstance();
+    final oldUid = LKClient.shared.session.uid;
     await _secure.delete(key: 'security_key');
     await p.remove('security_key');
     await p.remove('uid');
     await p.remove('nickname');
     await p.remove('avatar');
+    if (oldUid > 0) {
+      await p.remove(_profileCacheKey(oldUid));
+      await p.remove(_medalCacheKey(oldUid));
+    }
     LKClient.shared.session.clear();
     LKClient.sessionRev.value++;
+  }
+
+  static String _medalCacheKey(int uid) => 'my_medals_cache_$uid';
+  static String _profileCacheKey(int uid) => 'my_profile_cache_$uid';
+  static const _globalMedalsKey = 'global_user_medals_cache_v1';
+  static const _localShelfKey = 'local_shelf_books_v1';
+  static final ValueNotifier<int> localShelfRev = ValueNotifier<int>(0);
+
+  /// 未登录时使用的本地书架,只保存公开的书籍展示字段。
+  static Future<List<LKBook>> localShelf() async {
+    final raw =
+        (await SharedPreferences.getInstance()).getString(_localShelfKey);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return decoded
+          .whereType<Map>()
+          .map((e) => LKBook.fromJson(Map<String, dynamic>.from(e)))
+          .where((book) => book.bookId > 0)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static Future<bool> isLocalShelf(int bookId) async {
+    if (bookId <= 0) return false;
+    final books = await localShelf();
+    return books.any((book) => book.bookId == bookId);
+  }
+
+  static Future<void> setLocalShelf(LKBook book, bool added) async {
+    if (book.bookId <= 0) return;
+    // localShelf() 在空数据时可能返回 const [],这里必须复制为可变列表。
+    final books = (await localShelf()).toList();
+    books.removeWhere((item) => item.bookId == book.bookId);
+    if (added) books.insert(0, book);
+    await (await SharedPreferences.getInstance()).setString(
+        _localShelfKey, jsonEncode(books.map((e) => e.toJson()).toList()));
+    localShelfRev.value++;
+  }
+
+  /// 读取当前账号上次成功获取的个人资料；null 表示尚未缓存或缓存已损坏。
+  static Future<LKMyProfile?> cachedMyProfile(int uid) async {
+    if (uid <= 0) return null;
+    final raw = (await SharedPreferences.getInstance())
+        .getString(_profileCacheKey(uid));
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final profile = LKMyProfile.fromJson(Map<String, dynamic>.from(decoded));
+      return profile.uid == uid ? profile : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 缓存资料展示所需字段，不包含 security_key、cookie 等会话凭据。
+  static Future<void> cacheMyProfile(int uid, LKMyProfile profile) async {
+    if (uid <= 0 || profile.uid != uid) return;
+    final data = <String, dynamic>{
+      'uid': profile.uid,
+      'nickname': profile.nickname,
+      'avatar': profile.avatar,
+      'signature': profile.signature,
+      'level_name': profile.levelName,
+      'level': profile.level,
+      'coin': profile.coin,
+      'isBrave': profile.isBrave,
+      'followers': profile.followersCount,
+      'following': profile.followingCount,
+      'post_count': profile.postCount,
+      'bookshelf_count': profile.bookshelfCount,
+      'history_count': profile.historyCount,
+      'medals': profile.medals
+          .take(5)
+          .map((medal) => {
+                'medal_id': medal.medalId,
+                'name': medal.name,
+                'image': medal.image,
+                'equipped': medal.equipped,
+              })
+          .toList(),
+    };
+    await (await SharedPreferences.getInstance())
+        .setString(_profileCacheKey(uid), jsonEncode(data));
+  }
+
+  /// 读取当前账号上次成功获取的勋章列表；null 表示尚未缓存。
+  static Future<List<LKMedal>?> cachedMedals(int uid) async {
+    if (uid <= 0) return null;
+    final raw =
+        (await SharedPreferences.getInstance()).getString(_medalCacheKey(uid));
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return null;
+      return decoded
+          .whereType<Map>()
+          .map((e) => LKMedal.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> cacheMedals(int uid, List<LKMedal> medals) async {
+    if (uid <= 0) return;
+    final data = medals
+        .map((medal) => {
+              'medal_id': medal.medalId,
+              'name': medal.name,
+              'image': medal.image,
+              'equipped': medal.equipped,
+            })
+        .toList();
+    await (await SharedPreferences.getInstance())
+        .setString(_medalCacheKey(uid), jsonEncode(data));
+    await cacheGlobalMedals({uid: medals});
+  }
+
+  /// 读取所有动态/公开资料共用的用户勋章缓存，避免每个页面重复请求。
+  static Future<Map<int, List<LKMedal>>> cachedGlobalMedals() async {
+    final raw =
+        (await SharedPreferences.getInstance()).getString(_globalMedalsKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final result = <int, List<LKMedal>>{};
+      for (final entry in decoded.entries) {
+        final uid = int.tryParse(entry.key.toString());
+        final list = entry.value;
+        if (uid == null || uid <= 0 || list is! List) continue;
+        final medals = list
+            .whereType<Map>()
+            .map((e) => LKMedal.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.image.isNotEmpty)
+            .take(5)
+            .toList();
+        if (medals.isNotEmpty) result[uid] = medals;
+      }
+      return result;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> cacheGlobalMedals(
+      Map<int, List<LKMedal>> incoming) async {
+    final updates = incoming.entries
+        .where((entry) => entry.key > 0 && entry.value.isNotEmpty)
+        .toList();
+    if (updates.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final merged = <String, dynamic>{};
+      final raw = prefs.getString(_globalMedalsKey);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          merged.addAll(Map<String, dynamic>.from(decoded));
+        }
+      }
+      for (final entry in updates) {
+        merged['${entry.key}'] = entry.value
+            .take(5)
+            .map((medal) => {
+                  'medal_id': medal.medalId,
+                  'name': medal.name,
+                  'image': medal.image,
+                  'equipped': medal.equipped,
+                })
+            .toList();
+      }
+      // 控制 SharedPreferences 体积，只保留最近一次合并中的最多 500 个用户。
+      final keys = merged.keys.toList();
+      if (keys.length > 500) {
+        for (final key in keys.take(keys.length - 500)) {
+          merged.remove(key);
+        }
+      }
+      await prefs.setString(_globalMedalsKey, jsonEncode(merged));
+    } catch (_) {
+      // 缓存失败不影响动态内容显示。
+    }
   }
 
   static ThemeMode _parseTheme(String? s) => switch (s) {

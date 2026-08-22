@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../api/lk_api.dart';
 import '../api/lk_client.dart';
+import '../api/models.dart';
+import '../api/store.dart';
 import '../widgets/common.dart';
 import 'reader_page.dart';
 import 'search_page.dart';
@@ -36,7 +38,7 @@ class BookDetailPage extends StatefulWidget {
 }
 
 class _BookDetailPageState extends State<BookDetailPage> {
-  dynamic _book;
+  LKBook? _book;
   List<dynamic> _volumes = [];
   bool _inShelf = false;
   int _latestChapterId = 0;
@@ -47,10 +49,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
   bool _fabVisible = true;
   double _lastOffset = 0;
 
-  /// 目录中当前就地展开的卷;展开后章节列表直接显示在卷卡片下方
-  int? _expandedVolumeId;
+  /// 目录中已就地展开的卷;展开后章节列表直接显示在卷卡片下方。
+  final Set<int> _expandedVolumeIds = <int>{};
   final Map<int, List<dynamic>> _volumeChapters = {};
   final Map<int, String> _volumeErrors = {};
+  bool _loadingAllVolumes = false;
 
   @override
   void initState() {
@@ -73,7 +76,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
 
   Future<void> _load() async {
     try {
-      final book = await LKApi.bookDetail(widget.bookId);
+      final detailBook = await LKApi.bookDetail(widget.bookId);
+      // 详情接口个别缓存/兼容响应可能缺少 book_id,但当前页面路由 ID 是可靠的。
+      final book = detailBook.bookId > 0
+          ? detailBook
+          : LKBook.fromJson({...detailBook.toJson(), 'book_id': widget.bookId});
       final vols = await LKApi.volumes(widget.bookId, 1);
       if (!mounted) return;
       setState(() {
@@ -91,10 +98,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
             _inShelf = (st['in_shelf'] as num?)?.toInt() == 1;
             _hasHistory = (st['has_history'] as num?)?.toInt() == 1;
             _latestChapterId = (st['latest_chapter_id'] as num?)?.toInt() ?? 0;
-            _latestChapterTitle =
-                (st['latest_chapter_title'] as String?) ?? '';
+            _latestChapterTitle = (st['latest_chapter_title'] as String?) ?? '';
           });
         } catch (_) {}
+      } else if (await LKStore.isLocalShelf(book.bookId) && mounted) {
+        setState(() => _inShelf = true);
       }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -102,9 +110,23 @@ class _BookDetailPageState extends State<BookDetailPage> {
   }
 
   Future<void> _toggleShelf() async {
+    final add = !_inShelf;
     try {
-      await LKApi.toggleShelf(widget.bookId, !_inShelf);
-      if (mounted) setState(() => _inShelf = !_inShelf);
+      if (LKClient.shared.session.isLoggedIn) {
+        await LKApi.toggleShelf(widget.bookId, add);
+        final book = _book;
+        if (book != null) {
+          await LKStore.setLocalShelf(book, add);
+        }
+      } else {
+        final book = _book;
+        if (book == null) {
+          if (mounted) showLkError(context, '书籍信息仍在加载,请稍后再试');
+          return;
+        }
+        await LKStore.setLocalShelf(book, add);
+      }
+      if (mounted) setState(() => _inShelf = add);
     } catch (e) {
       if (mounted) showLkError(context, e);
     }
@@ -172,183 +194,195 @@ class _BookDetailPageState extends State<BookDetailPage> {
     return Scaffold(
       body: _error != null && b == null
           ? Center(
-              child:
-                  Text(_error!, style: const TextStyle(color: Colors.grey)))
+              child: Text(_error!, style: const TextStyle(color: Colors.grey)))
           : b == null
               ? const LkLoadingIndicator()
-              : CustomScrollView(
-                  controller: _scroll,
-                  slivers: [
-                    SliverAppBar(
-                      pinned: true,
-                      elevation: 0,
-                      scrolledUnderElevation: 0.5,
-                      backgroundColor:
-                          isDark ? const Color(0xFF1B1C21) : Colors.white,
-                      foregroundColor:
-                          isDark ? Colors.white : const Color(0xFF263238),
-                      expandedHeight: 8,
-                      title: Text(b.title,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CoverImage(
-                                    url: b.coverUrl,
-                                    width: 112,
-                                    height: 152,
-                                    radius: 10),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(b.title,
-                                          maxLines: 3,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              height: 1.3)),
-                                      const SizedBox(height: 8),
-                                      Text('作者: ${b.authorName}',
-                                          style: TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.grey.shade600)),
-                                      const SizedBox(height: 4),
-                                      Row(children: [
-                                        _miniBadge(scheme,
-                                            b.isCompleted ? '完结' : '连载'),
-                                        const SizedBox(width: 6),
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    controller: _scroll,
+                    slivers: [
+                      SliverAppBar(
+                        pinned: true,
+                        elevation: 0,
+                        scrolledUnderElevation: 0.5,
+                        backgroundColor:
+                            isDark ? const Color(0xFF1B1C21) : Colors.white,
+                        foregroundColor:
+                            isDark ? Colors.white : const Color(0xFF263238),
+                        expandedHeight: 8,
+                        title: Text(b.title,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  CoverImage(
+                                      url: b.coverUrl,
+                                      width: 112,
+                                      height: 152,
+                                      radius: 10),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(b.title,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                                height: 1.3)),
+                                        const SizedBox(height: 8),
+                                        Text('作者: ${b.authorName}',
+                                            style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey.shade600)),
+                                        const SizedBox(height: 4),
+                                        Row(children: [
+                                          _miniBadge(scheme,
+                                              b.isCompleted ? '完结' : '连载'),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                              '${b.volumeCount}卷 · ${b.chapterCount}章',
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey.shade500)),
+                                        ]),
+                                        const SizedBox(height: 4),
                                         Text(
-                                            '${b.volumeCount}卷 · ${b.chapterCount}章',
+                                          b.wordCount >= 10000
+                                              ? '${(b.wordCount / 10000).toStringAsFixed(1)} 万字'
+                                              : '${b.wordCount} 字',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade500),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (b.tags.isNotEmpty) ...[
+                                const SizedBox(height: 14),
+                                SizedBox(
+                                  height: 32,
+                                  child: ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: b.tags.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(width: 8),
+                                    itemBuilder: (_, i) => GestureDetector(
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) => SearchPage(
+                                                initialTag: b.tags[i])),
+                                      ),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 5),
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: scheme.primary
+                                              .withValues(alpha: 0.08),
+                                          borderRadius:
+                                              BorderRadius.circular(16),
+                                        ),
+                                        child: Text(b.tags[i],
                                             style: TextStyle(
                                                 fontSize: 12,
-                                                color: Colors.grey.shade500)),
-                                      ]),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        b.wordCount >= 10000
-                                            ? '${(b.wordCount / 10000).toStringAsFixed(1)} 万字'
-                                            : '${b.wordCount} 字',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade500),
+                                                color: scheme.primary)),
                                       ),
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ],
-                            ),
-                            if (b.tags.isNotEmpty) ...[
                               const SizedBox(height: 14),
-                              SizedBox(
-                                height: 32,
-                                child: ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: b.tags.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(width: 8),
-                                  itemBuilder: (_, i) => GestureDetector(
-                                    onTap: () => Navigator.push(
+                              Row(children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: _toggleShelf,
+                                    icon: Icon(
+                                        _inShelf
+                                            ? Icons.bookmark_added_rounded
+                                            : Icons.bookmark_add_outlined,
+                                        size: 18),
+                                    label: Text(_inShelf ? '已加书架' : '加入书架'),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                          builder: (_) => SearchPage(
-                                              initialTag: b.tags[i])),
+                                          builder: (_) => CommentsPage(
+                                              bookId: b.bookId,
+                                              bookTitle: b.title)),
                                     ),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 5),
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                        color: scheme.primary
-                                            .withValues(alpha: 0.08),
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Text(b.tags[i],
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: scheme.primary)),
-                                    ),
+                                    icon: const Icon(Icons.chat_bubble_outline,
+                                        size: 18),
+                                    label: const Text('书评'),
                                   ),
                                 ),
-                              ),
-                            ],
-                            const SizedBox(height: 14),
-                            Row(children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: LKClient
-                                          .shared.session.isLoggedIn
-                                      ? _toggleShelf
-                                      : null,
-                                  icon: Icon(
-                                      _inShelf
-                                          ? Icons.bookmark_added_rounded
-                                          : Icons.bookmark_add_outlined,
-                                      size: 18),
-                                  label:
-                                      Text(_inShelf ? '已加书架' : '加入书架'),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) => CommentsPage(
-                                            bookId: b.bookId,
-                                            bookTitle: b.title)),
-                                  ),
-                                  icon: const Icon(
-                                      Icons.chat_bubble_outline,
-                                      size: 18),
-                                  label: const Text('书评'),
-                                ),
-                              ),
-                            ]),
-                            const SizedBox(height: 18),
-                            const Text('简介',
-                                style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 6),
-                            Text(b.summary,
-                                style: TextStyle(
-                                    height: 1.6,
-                                    fontSize: 13.5,
-                                    color: Colors.grey.shade700)),
-                            const SizedBox(height: 18),
-                            Row(children: [
-                              const Text('目录',
+                              ]),
+                              const SizedBox(height: 18),
+                              const Text('简介',
                                   style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold)),
-                              const Spacer(),
-                              Text('${b.volumeCount} 卷',
+                              const SizedBox(height: 6),
+                              Text(b.summary,
                                   style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade500)),
-                            ]),
-                            const SizedBox(height: 8),
-                            ..._volumes.map((v) => _volumeCard(v)),
-                            SizedBox(
-                                height: 90 +
-                                    MediaQuery.of(context).padding.bottom),
-                          ],
+                                      height: 1.6,
+                                      fontSize: 13.5,
+                                      color: Colors.grey.shade700)),
+                              const SizedBox(height: 18),
+                              Row(children: [
+                                const Text('目录',
+                                    style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold)),
+                                const Spacer(),
+                                TextButton.icon(
+                                  onPressed: _loadingAllVolumes
+                                      ? null
+                                      : _toggleAllVolumes,
+                                  icon: Icon(_allVolumesExpanded
+                                      ? Icons.unfold_less_rounded
+                                      : Icons.unfold_more_rounded),
+                                  label: Text(_loadingAllVolumes
+                                      ? '加载中'
+                                      : _allVolumesExpanded
+                                          ? '收起全部'
+                                          : '展开全部'),
+                                ),
+                                Text('${b.volumeCount} 卷',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade500)),
+                              ]),
+                              const SizedBox(height: 8),
+                              ..._volumes.map((v) => _volumeCard(v)),
+                              SizedBox(
+                                  height: 90 +
+                                      MediaQuery.of(context).padding.bottom),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
       floatingActionButton: AnimatedSlide(
         duration: const Duration(milliseconds: 200),
@@ -361,8 +395,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
             icon: const Icon(Icons.menu_book_rounded),
             label: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 220),
-              child: Text(_fabLabel,
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              child:
+                  Text(_fabLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
           ),
         ),
@@ -389,7 +423,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
 
   Widget _volumeCard(dynamic v) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final expanded = _expandedVolumeId == v.volumeId;
+    final expanded = _expandedVolumeIds.contains(v.volumeId);
     final chs = _volumeChapters[v.volumeId];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -431,26 +465,63 @@ class _BookDetailPageState extends State<BookDetailPage> {
   /// 点击卷:就地展开/收起章节列表(首次展开时加载)
   Future<void> _toggleVolume(dynamic v) async {
     final id = v.volumeId as int;
-    if (_expandedVolumeId == id) {
-      setState(() => _expandedVolumeId = null);
+    if (_expandedVolumeIds.contains(id)) {
+      setState(() => _expandedVolumeIds.remove(id));
       return;
     }
     setState(() {
-      _expandedVolumeId = id;
+      _expandedVolumeIds.add(id);
       _volumeErrors.remove(id);
     });
+    await _loadVolumeChapters(v);
+  }
+
+  bool get _allVolumesExpanded =>
+      _volumes.isNotEmpty &&
+      _volumes.every((volume) => _expandedVolumeIds.contains(volume.volumeId));
+
+  Future<void> _toggleAllVolumes() async {
+    if (_volumes.isEmpty) return;
+    if (_allVolumesExpanded) {
+      setState(_expandedVolumeIds.clear);
+      return;
+    }
+    setState(() {
+      _expandedVolumeIds.addAll(
+          _volumes.map<int>((volume) => (volume.volumeId as num).toInt()));
+      _volumeErrors.clear();
+      _loadingAllVolumes = true;
+    });
+    final pending = _volumes
+        .where((volume) =>
+            !_volumeChapters.containsKey((volume.volumeId as num).toInt()))
+        .toList();
+    try {
+      // 目录展开是用户明确触发的操作，章节请求并发发出，避免逐卷等待。
+      await Future.wait(pending.map(_loadVolumeChapters));
+    } finally {
+      if (mounted) setState(() => _loadingAllVolumes = false);
+    }
+  }
+
+  Future<void> _loadVolumeChapters(dynamic v) async {
+    final id = v.volumeId as int;
+    final book = _book;
+    if (book == null) return;
     if (_volumeChapters.containsKey(id)) return;
     try {
-      final chs = await LKApi.chapters(_book.bookId, id, 1);
+      final chs = await LKApi.chapters(book.bookId, id, 1);
       if (!mounted) return;
       setState(() => _volumeChapters[id] = chs);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _volumeErrors[id] = e.toString());
+      setState(() => _volumeErrors[id] = '连接失败，请检查网络后重试');
     }
   }
 
   List<Widget> _chapterRows(dynamic v, List<dynamic>? chs) {
+    final book = _book;
+    if (book == null) return const [];
     if (chs == null) {
       if (_volumeErrors[v.volumeId] != null) {
         return [
@@ -480,8 +551,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 context,
                 MaterialPageRoute(
                     builder: (_) => ReaderPage(
-                          bookId: _book.bookId,
-                          bookTitle: _book.title,
+                          bookId: book.bookId,
+                          bookTitle: book.title,
                           chapterId: c.chapterId,
                           chapterTitle: c.title,
                           volumeId: v.volumeId,
@@ -503,14 +574,13 @@ class _BookDetailPageState extends State<BookDetailPage> {
                     c.wordCount >= 10000
                         ? '${(c.wordCount / 10000).toStringAsFixed(1)}万字'
                         : '${c.wordCount}字',
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey.shade500),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                   ),
                   if (c.locked && !c.unlocked)
                     const Padding(
                       padding: EdgeInsets.only(left: 6),
-                      child:
-                          Icon(Icons.lock_outline, size: 14, color: Colors.grey),
+                      child: Icon(Icons.lock_outline,
+                          size: 14, color: Colors.grey),
                     ),
                 ]),
               ),
@@ -560,48 +630,60 @@ class _ChaptersPageState extends State<ChaptersPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          title: Text(
-              widget.volumeTitle.isEmpty ? '章节列表' : widget.volumeTitle)),
-      body: _error != null && _chapters.isEmpty
-          ? Center(
-              child:
-                  Text(_error!, style: const TextStyle(color: Colors.grey)))
-          : ListView.separated(
-              padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).padding.bottom),
-              itemCount: _chapters.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                final c = _chapters[i];
-                return ListTile(
-                  // 网站标题本身已含"第X章",不再重复拼接
-                  title: Row(children: [
-                    if (c.braveOnly) _braveAccessBadge(context),
-                    Expanded(
-                      child: Text(c.title,
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
-                    ),
-                  ]),
-                  subtitle: Text(c.wordCount >= 10000
-                      ? '${(c.wordCount / 10000).toStringAsFixed(1)}万字'
-                      : '${c.wordCount}字'),
-                  trailing: c.locked && !c.unlocked
-                      ? const Icon(Icons.lock_outline, size: 18)
-                      : null,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => ReaderPage(
-                              bookId: widget.bookId,
-                              bookTitle: widget.bookTitle,
-                              chapterId: c.chapterId,
-                              chapterTitle: c.title,
-                              volumeId: widget.volumeId,
-                            )),
+          title:
+              Text(widget.volumeTitle.isEmpty ? '章节列表' : widget.volumeTitle)),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: _error != null && _chapters.isEmpty
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.sizeOf(context).height * 0.7,
+                    child: Center(
+                        child: Text(_error!,
+                            style: const TextStyle(color: Colors.grey))),
                   ),
-                );
-              },
-            ),
+                ],
+              )
+            : ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(context).padding.bottom),
+                itemCount: _chapters.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) {
+                  final c = _chapters[i];
+                  return ListTile(
+                    // 网站标题本身已含"第X章",不再重复拼接
+                    title: Row(children: [
+                      if (c.braveOnly) _braveAccessBadge(context),
+                      Expanded(
+                        child: Text(c.title,
+                            maxLines: 2, overflow: TextOverflow.ellipsis),
+                      ),
+                    ]),
+                    subtitle: Text(c.wordCount >= 10000
+                        ? '${(c.wordCount / 10000).toStringAsFixed(1)}万字'
+                        : '${c.wordCount}字'),
+                    trailing: c.locked && !c.unlocked
+                        ? const Icon(Icons.lock_outline, size: 18)
+                        : null,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => ReaderPage(
+                                bookId: widget.bookId,
+                                bookTitle: widget.bookTitle,
+                                chapterId: c.chapterId,
+                                chapterTitle: c.title,
+                                volumeId: widget.volumeId,
+                              )),
+                    ),
+                  );
+                },
+              ),
+      ),
     );
   }
 }

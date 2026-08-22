@@ -86,13 +86,13 @@ class CoverImage extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
         child: CachedNetworkImage(
-                imageUrl: url.isEmpty ? kDefaultCover : url,
-                width: width,
-                height: height,
-                fit: fit,
-                placeholder: (_, __) => placeholder,
-                errorWidget: (_, __, ___) => placeholder,
-              ),
+          imageUrl: url.isEmpty ? kDefaultCover : url,
+          width: width,
+          height: height,
+          fit: fit,
+          placeholder: (_, __) => placeholder,
+          errorWidget: (_, __, ___) => placeholder,
+        ),
       ),
     );
   }
@@ -103,18 +103,18 @@ class BookCard extends StatelessWidget {
   final LKBook book;
   final VoidCallback onTap;
   final int? rank;
-  const BookCard({super.key, required this.book, required this.onTap, this.rank});
+  const BookCard(
+      {super.key, required this.book, required this.onTap, this.rank});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E2025) : Colors.white;
-    final titleColor = isDark ? const Color(0xFFECEDF1) : const Color(0xFF263238);
+    final titleColor =
+        isDark ? const Color(0xFFECEDF1) : const Color(0xFF263238);
     final borderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade300;
-    final status = book.isCompleted
-        ? '完结'
-        : (book.serialStatus.isEmpty ? '连载' : book.serialStatus);
+    final status = bookStatusLabel(book);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
       child: Material(
@@ -130,7 +130,8 @@ class BookCard extends StatelessWidget {
               children: [
                 if (rank != null) _rankBadge(scheme, rank!),
                 if (rank != null) const SizedBox(width: 10),
-                CoverImage(url: book.coverUrl, width: 76, height: 101, radius: 8),
+                CoverImage(
+                    url: book.coverUrl, width: 76, height: 101, radius: 8),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -226,7 +227,8 @@ class BookCard extends StatelessWidget {
                 ),
                 Icon(Icons.chevron_right_rounded,
                     size: 20,
-                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+                    color:
+                        isDark ? Colors.grey.shade700 : Colors.grey.shade300),
               ],
             ),
           ),
@@ -263,9 +265,7 @@ class BookCard extends StatelessWidget {
       child: Text(
         '$r',
         style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 13),
+            color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
       ),
     );
   }
@@ -281,7 +281,8 @@ class BookCard extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.35), width: 0.6),
       ),
       child: Text(status,
-          style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w500)),
+          style: TextStyle(
+              fontSize: 10, color: color, fontWeight: FontWeight.w500)),
     );
   }
 
@@ -328,15 +329,14 @@ class BookGridCard extends StatelessWidget {
   final LKBook book;
   final VoidCallback onTap;
   final int? rank;
-  const BookGridCard({super.key, required this.book, required this.onTap, this.rank});
+  const BookGridCard(
+      {super.key, required this.book, required this.onTap, this.rank});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
-    final status = book.isCompleted
-        ? '完结'
-        : (book.serialStatus.isEmpty ? '连载' : book.serialStatus);
+    final status = bookStatusLabel(book);
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
@@ -349,7 +349,10 @@ class BookGridCard extends StatelessWidget {
               children: [
                 Positioned.fill(
                   child: CoverImage(
-                      url: book.coverUrl, width: double.infinity, height: double.infinity, radius: 12),
+                      url: book.coverUrl,
+                      width: double.infinity,
+                      height: double.infinity,
+                      radius: 12),
                 ),
                 if (rank != null)
                   Positioned(
@@ -393,8 +396,8 @@ class BookGridCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(status,
-                        style: const TextStyle(
-                            fontSize: 10, color: Colors.white)),
+                        style:
+                            const TextStyle(fontSize: 10, color: Colors.white)),
                   ),
                 ),
               ],
@@ -409,7 +412,8 @@ class BookGridCard extends StatelessWidget {
                 fontSize: 13.5,
                 fontWeight: FontWeight.w600,
                 height: 1.25,
-                color: isDark ? const Color(0xFFECEDF1) : const Color(0xFF263238)),
+                color:
+                    isDark ? const Color(0xFFECEDF1) : const Color(0xFF263238)),
           ),
           const SizedBox(height: 3),
           Row(children: [

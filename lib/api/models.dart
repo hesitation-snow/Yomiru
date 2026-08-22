@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 // 数据模型(手写 fromJson,字段与服务端 snake_case 一一对应)
 
 Map<String, dynamic>? _jsonMap(dynamic value) =>
@@ -18,6 +20,17 @@ Map<String, dynamic>? _firstJsonMap(dynamic value) {
 bool _jsonFlag(dynamic value) =>
     value == true || value == 1 || value == '1' || value == 'true';
 
+int _jsonInt(dynamic value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+int? _jsonIntOrNull(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toInt();
+  return int.tryParse(value.toString());
+}
+
 class LKUser {
   final int uid;
   final String nickname;
@@ -30,6 +43,550 @@ class LKUser {
         avatar: (j['avatar'] as String?) ?? '',
         sign: (j['sign'] as String?) ?? (j['signature'] as String?) ?? '',
       );
+}
+
+/// 当前登录用户的个人页资料(只读)
+class LKMyProfile {
+  final int uid;
+  final String nickname;
+  final String avatar;
+  final String signature;
+  final String levelName;
+  final int level;
+  final int coin;
+  final bool isBrave;
+  final int followersCount;
+  final int followingCount;
+  final int postCount;
+  final int? bookshelfCount;
+  final int? historyCount;
+  final List<LKMedal> medals;
+
+  LKMyProfile({
+    this.uid = 0,
+    this.nickname = '',
+    this.avatar = '',
+    this.signature = '',
+    this.levelName = '',
+    this.level = 0,
+    this.coin = 0,
+    this.isBrave = false,
+    this.followersCount = 0,
+    this.followingCount = 0,
+    this.postCount = 0,
+    this.bookshelfCount,
+    this.historyCount,
+    this.medals = const [],
+  });
+
+  factory LKMyProfile.fromJson(Map<String, dynamic> j) {
+    final profile = _jsonMap(j['profile']) ?? j;
+    final stats = _jsonMap(j['stats']) ?? const <String, dynamic>{};
+    final balance = _jsonMap(profile['balance']) ?? const <String, dynamic>{};
+    final levelObject = _jsonMap(profile['level']);
+    final rawMedals = profile['medals'] ??
+        profile['medal_list'] ??
+        profile['equipped_medals'] ??
+        j['medals'];
+    final medals = rawMedals is List
+        ? rawMedals
+            .whereType<Map>()
+            .map((e) => LKMedal.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.image.isNotEmpty)
+            .take(5)
+            .toList()
+        : const <LKMedal>[];
+    final rawLevel =
+        levelObject?['level'] ?? profile['level_number'] ?? profile['level'];
+    final levelName = (profile['level_name'] ??
+            profile['levelName'] ??
+            profile['level_title'] ??
+            profile['group_name'] ??
+            profile['user_group_name'] ??
+            profile['rank_name'] ??
+            profile['role_name'] ??
+            levelObject?['name'] ??
+            levelObject?['title'] ??
+            '')
+        .toString();
+    return LKMyProfile(
+      uid: _jsonInt(profile['uid'] ?? profile['user_id'] ?? profile['id']),
+      nickname: (profile['nickname'] ?? profile['username'] ?? '').toString(),
+      avatar: (profile['avatar'] ?? profile['avatar_url'] ?? '').toString(),
+      signature: (profile['sign'] ?? profile['signature'] ?? '').toString(),
+      levelName: levelName,
+      level: _jsonInt(rawLevel),
+      coin: _jsonInt(profile['coin'] ??
+          profile['light_coin'] ??
+          profile['lightCoin'] ??
+          balance['coin'] ??
+          balance['light_coin'] ??
+          balance['lightCoin'] ??
+          profile['balance']),
+      isBrave: _jsonFlag(profile['passer'] ??
+          profile['is_passer'] ??
+          profile['isBrave'] ??
+          profile['brave']),
+      followersCount: _jsonInt(stats['followers'] ??
+          stats['fans'] ??
+          stats['fans_count'] ??
+          profile['followers'] ??
+          profile['fans_count']),
+      followingCount: _jsonInt(stats['following'] ??
+          stats['following_count'] ??
+          profile['following'] ??
+          profile['following_count']),
+      postCount: _jsonInt(stats['publish_articles'] ??
+          stats['post_count'] ??
+          stats['posts'] ??
+          profile['post_count'] ??
+          j['publish_articles'] ??
+          j['post_count']),
+      bookshelfCount: _jsonIntOrNull(stats['bookshelf_count'] ??
+          stats['my_bookshelf_count'] ??
+          stats['my_bookshelf_count_value'] ??
+          profile['bookshelf_count'] ??
+          profile['my_bookshelf_count'] ??
+          j['bookshelf_count'] ??
+          j['my_bookshelf_count'] ??
+          j['my_bookshelf_count_value'] ??
+          j['bookshelfCount']),
+      historyCount: _jsonIntOrNull(stats['history_count'] ??
+          stats['my_history_count'] ??
+          stats['my_history_count_value'] ??
+          stats['reading_count'] ??
+          profile['history_count'] ??
+          profile['my_history_count'] ??
+          j['history_count'] ??
+          j['my_history_count'] ??
+          j['my_history_count_value'] ??
+          j['reading_count'] ??
+          j['historyCount']),
+      medals: medals,
+    );
+  }
+}
+
+/// 关注/粉丝列表中的用户(只读)
+class LKFollowUser {
+  final int uid;
+  final String nickname;
+  final String avatar;
+  final String signature;
+  final String levelName;
+  final bool isBrave;
+  final bool followed;
+
+  LKFollowUser({
+    this.uid = 0,
+    this.nickname = '',
+    this.avatar = '',
+    this.signature = '',
+    this.levelName = '',
+    this.isBrave = false,
+    this.followed = false,
+  });
+
+  factory LKFollowUser.fromJson(Map<String, dynamic> j) {
+    final relation = _jsonMap(j['relation']) ??
+        _jsonMap(j['interaction_state']) ??
+        const <String, dynamic>{};
+    final levelObject = _jsonMap(j['level']);
+    return LKFollowUser(
+      uid: _jsonInt(j['uid'] ?? j['user_id'] ?? j['id']),
+      nickname:
+          (j['nickname'] ?? j['username'] ?? j['name'] ?? j['nick_name'] ?? '')
+              .toString(),
+      avatar: (j['avatar'] ?? j['avatar_url'] ?? '').toString(),
+      signature: (j['sign'] ?? j['signature'] ?? '').toString(),
+      levelName: (j['level_name'] ??
+              j['levelName'] ??
+              j['level_title'] ??
+              j['group_name'] ??
+              levelObject?['name'] ??
+              levelObject?['title'] ??
+              '')
+          .toString(),
+      isBrave: _jsonFlag(j['passer'] ??
+          j['is_passer'] ??
+          j['isBrave'] ??
+          j['brave'] ??
+          relation['is_passer'] ??
+          relation['isBrave']),
+      followed: _jsonFlag(relation['followed'] ??
+          relation['is_followed'] ??
+          j['followed'] ??
+          j['is_followed']),
+    );
+  }
+
+  LKFollowUser copyWith({bool? followed}) => LKFollowUser(
+        uid: uid,
+        nickname: nickname,
+        avatar: avatar,
+        signature: signature,
+        levelName: levelName,
+        isBrave: isBrave,
+        followed: followed ?? this.followed,
+      );
+}
+
+class LKFollowPage {
+  final List<LKFollowUser> items;
+  final int page;
+  final int pageSize;
+  final int total;
+  final bool hasMore;
+
+  LKFollowPage({
+    this.items = const [],
+    this.page = 1,
+    this.pageSize = 20,
+    this.total = 0,
+    this.hasMore = false,
+  });
+
+  factory LKFollowPage.fromJson(Map<String, dynamic> j,
+      {int fallbackPage = 1, int fallbackPageSize = 20}) {
+    final rawList = j['items'] ?? j['list'] ?? j['cards'];
+    final items = rawList is List
+        ? rawList
+            .whereType<Map>()
+            .map((e) => LKFollowUser.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : const <LKFollowUser>[];
+    final pageInfo = _jsonMap(j['pagination']) ??
+        _jsonMap(j['page_info']) ??
+        const <String, dynamic>{};
+    final page = _jsonInt(pageInfo['page'] ??
+        pageInfo['current_page'] ??
+        j['page'] ??
+        fallbackPage);
+    final pageSize = _jsonInt(pageInfo['page_size'] ??
+        pageInfo['pageSize'] ??
+        pageInfo['per_page'] ??
+        j['page_size'] ??
+        j['pageSize'] ??
+        fallbackPageSize);
+    final total = _jsonInt(pageInfo['total'] ??
+        pageInfo['total_count'] ??
+        pageInfo['count'] ??
+        j['total'] ??
+        items.length);
+    final rawHasMore = pageInfo['has_more'] ??
+        pageInfo['hasMore'] ??
+        pageInfo['has_next'] ??
+        j['has_more'] ??
+        j['hasMore'] ??
+        j['has_next'];
+    final hasMore = rawHasMore == null
+        ? (total > page * pageSize || items.length >= pageSize)
+        : _jsonFlag(rawHasMore);
+    return LKFollowPage(
+      items: items,
+      page: page > 0 ? page : fallbackPage,
+      pageSize: pageSize > 0 ? pageSize : fallbackPageSize,
+      total: total,
+      hasMore: hasMore,
+    );
+  }
+}
+
+class LKMedal {
+  final int medalId;
+  final String name;
+  final String image;
+  final bool equipped;
+
+  LKMedal({
+    this.medalId = 0,
+    this.name = '',
+    this.image = '',
+    this.equipped = false,
+  });
+
+  factory LKMedal.fromJson(Map<String, dynamic> j) => LKMedal(
+        medalId: _jsonInt(j['medal_id'] ?? j['id'] ?? j['goods_id']),
+        name: (j['name'] ?? j['title'] ?? '').toString(),
+        image: (j['image'] ?? j['img'] ?? j['icon'] ?? j['icon_url'] ?? '')
+            .toString(),
+        equipped: _jsonFlag(j['equipped'] ?? j['equip'] ?? j['is_equipped']),
+      );
+}
+
+/// 公开用户主页资料
+class LKPublicUserProfile {
+  final int uid;
+  final String nickname;
+  final String avatar;
+  final String signature;
+  final String levelName;
+  final int level;
+  final bool isBrave;
+  final int followersCount;
+  final int followingCount;
+  final int postCount;
+  final List<LKMedal> medals;
+  final bool followed;
+  final bool isSelf;
+  final bool canFollow;
+  final bool publicBookshelf;
+
+  const LKPublicUserProfile({
+    this.uid = 0,
+    this.nickname = '',
+    this.avatar = '',
+    this.signature = '',
+    this.levelName = '',
+    this.level = 0,
+    this.isBrave = false,
+    this.followersCount = 0,
+    this.followingCount = 0,
+    this.postCount = 0,
+    this.medals = const [],
+    this.followed = false,
+    this.isSelf = false,
+    this.canFollow = true,
+    this.publicBookshelf = false,
+  });
+
+  factory LKPublicUserProfile.fromJson(Map<String, dynamic> j) {
+    final profile = _jsonMap(j['profile']) ?? j;
+    final stats = _jsonMap(j['stats']) ?? const <String, dynamic>{};
+    final relation = _jsonMap(j['relation']) ?? const <String, dynamic>{};
+    final modules = _jsonMap(j['modules']) ?? const <String, dynamic>{};
+    final privacy = _jsonMap(j['privacy']) ?? const <String, dynamic>{};
+    final levelObject = _jsonMap(profile['level']);
+    final rawMedals = profile['medals'] ??
+        profile['medal_list'] ??
+        profile['equipped_medals'];
+    final medals = rawMedals is List
+        ? rawMedals
+            .whereType<Map>()
+            .map((e) => LKMedal.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.image.isNotEmpty)
+            .take(5)
+            .toList()
+        : const <LKMedal>[];
+    final rawCanFollow = relation['can_follow'];
+    return LKPublicUserProfile(
+      uid: _jsonInt(profile['uid'] ?? profile['user_id'] ?? profile['id']),
+      nickname:
+          (profile['nickname'] ?? profile['username'] ?? profile['name'] ?? '')
+              .toString(),
+      avatar: (profile['avatar'] ?? profile['avatar_url'] ?? '').toString(),
+      signature: (profile['sign'] ?? profile['signature'] ?? '').toString(),
+      levelName: (profile['level_name'] ??
+              profile['levelName'] ??
+              profile['level_title'] ??
+              profile['group_name'] ??
+              profile['user_group_name'] ??
+              profile['rank_name'] ??
+              levelObject?['name'] ??
+              levelObject?['title'] ??
+              '')
+          .toString(),
+      level: _jsonInt(
+          levelObject?['level'] ?? profile['level_number'] ?? profile['level']),
+      isBrave: _jsonFlag(profile['passer'] ??
+          profile['is_passer'] ??
+          profile['isBrave'] ??
+          profile['brave']),
+      followersCount: _jsonInt(stats['followers'] ??
+          stats['fans'] ??
+          stats['fans_count'] ??
+          profile['followers'] ??
+          profile['fans_count']),
+      followingCount: _jsonInt(stats['following'] ??
+          stats['following_count'] ??
+          profile['following'] ??
+          profile['following_count']),
+      postCount: _jsonInt(stats['publish_articles'] ??
+          stats['post_count'] ??
+          stats['posts'] ??
+          profile['post_count']),
+      medals: medals,
+      followed: _jsonFlag(relation['followed'] ??
+          relation['is_followed'] ??
+          profile['followed']),
+      isSelf: _jsonFlag(relation['is_self'] ?? relation['self']),
+      canFollow: rawCanFollow == null || _jsonFlag(rawCanFollow),
+      publicBookshelf: _jsonFlag(modules['public_bookshelf'] ??
+          modules['publicBookshelf'] ??
+          privacy['bookshelf_visible'] ??
+          privacy['bookshelfVisible']),
+    );
+  }
+}
+
+class LKPublicBook {
+  final int bookId;
+  final String title;
+  final String coverUrl;
+  final String summary;
+  final String updatedAt;
+  final String typeText;
+
+  LKPublicBook({
+    this.bookId = 0,
+    this.title = '',
+    this.coverUrl = '',
+    this.summary = '',
+    this.updatedAt = '',
+    this.typeText = '',
+  });
+
+  factory LKPublicBook.fromJson(Map<String, dynamic> j) => LKPublicBook(
+        bookId: _jsonInt(j['book_id'] ??
+            j['bookId'] ??
+            j['article_id'] ??
+            j['aid'] ??
+            j['id']),
+        title: (j['title'] ?? j['subject'] ?? j['name'] ?? '').toString(),
+        coverUrl: (j['cover_url'] ?? j['cover'] ?? j['image'] ?? j['img'] ?? '')
+            .toString(),
+        summary:
+            (j['summary'] ?? j['description'] ?? j['content'] ?? '').toString(),
+        updatedAt: (j['updated_at'] ??
+                j['updatedAt'] ??
+                j['created_at'] ??
+                j['createdAt'] ??
+                '')
+            .toString(),
+        typeText: (j['type_text'] ??
+                j['typeText'] ??
+                j['category_name'] ??
+                j['kind'] ??
+                '')
+            .toString(),
+      );
+}
+
+class LKPublicUserPage {
+  final LKPublicUserProfile profile;
+  final List<LKPublicBook> publications;
+  final int page;
+  final int pageSize;
+  final int total;
+  final bool hasMore;
+
+  LKPublicUserPage({
+    this.profile = const LKPublicUserProfile(),
+    this.publications = const [],
+    this.page = 1,
+    this.pageSize = 20,
+    this.total = 0,
+    this.hasMore = false,
+  });
+
+  factory LKPublicUserPage.fromJson(Map<String, dynamic> j,
+      {int fallbackPage = 1, int fallbackPageSize = 20}) {
+    final profile = LKPublicUserProfile.fromJson(j);
+    final publish = _jsonMap(j['publish']) ?? const <String, dynamic>{};
+    final books = _jsonMap(publish['books']) ?? const <String, dynamic>{};
+    final rawList = j['articles'] ??
+        j['article_list'] ??
+        books['list'] ??
+        books['items'] ??
+        const [];
+    final publications = rawList is List
+        ? rawList
+            .whereType<Map>()
+            .map((e) => LKPublicBook.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.bookId > 0 && e.title.isNotEmpty)
+            .toList()
+        : const <LKPublicBook>[];
+    final pageInfo = _jsonMap(j['article_page']) ??
+        _jsonMap(j['articlePage']) ??
+        _jsonMap(books['page_info']) ??
+        const <String, dynamic>{};
+    final page = _jsonInt(pageInfo['page'] ??
+        pageInfo['current_page'] ??
+        j['page'] ??
+        fallbackPage);
+    final pageSize = _jsonInt(pageInfo['page_size'] ??
+        pageInfo['pageSize'] ??
+        j['page_size'] ??
+        j['pageSize'] ??
+        fallbackPageSize);
+    final total = _jsonInt(pageInfo['total'] ??
+        pageInfo['count'] ??
+        j['total'] ??
+        publications.length);
+    final rawHasMore = pageInfo['has_more'] ??
+        pageInfo['hasMore'] ??
+        pageInfo['has_next'] ??
+        j['has_more'] ??
+        j['hasMore'];
+    final hasMore = rawHasMore == null
+        ? total > page * pageSize || publications.length >= pageSize
+        : _jsonFlag(rawHasMore);
+    return LKPublicUserPage(
+      profile: profile,
+      publications: publications,
+      page: page > 0 ? page : fallbackPage,
+      pageSize: pageSize > 0 ? pageSize : fallbackPageSize,
+      total: total,
+      hasMore: hasMore,
+    );
+  }
+}
+
+class LKPublicBookshelfPage {
+  final bool visible;
+  final List<LKPublicBook> books;
+  final int page;
+  final int pageSize;
+  final int total;
+  final bool hasMore;
+
+  LKPublicBookshelfPage({
+    this.visible = false,
+    this.books = const [],
+    this.page = 1,
+    this.pageSize = 20,
+    this.total = 0,
+    this.hasMore = false,
+  });
+
+  factory LKPublicBookshelfPage.fromJson(Map<String, dynamic> j,
+      {int fallbackPage = 1, int fallbackPageSize = 20}) {
+    final privacy = _jsonMap(j['privacy']) ?? const <String, dynamic>{};
+    final rawList = j['list'] ?? j['items'] ?? j['books'] ?? const [];
+    final books = rawList is List
+        ? rawList
+            .whereType<Map>()
+            .map((e) => LKPublicBook.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.bookId > 0 && e.title.isNotEmpty)
+            .toList()
+        : const <LKPublicBook>[];
+    final pageInfo = _jsonMap(j['page_info']) ??
+        _jsonMap(j['pagination']) ??
+        const <String, dynamic>{};
+    final page = _jsonInt(pageInfo['page'] ?? j['page'] ?? fallbackPage);
+    final pageSize = _jsonInt(pageInfo['page_size'] ??
+        pageInfo['pageSize'] ??
+        j['page_size'] ??
+        fallbackPageSize);
+    final total = _jsonInt(pageInfo['total'] ?? j['total'] ?? books.length);
+    final rawHasMore = pageInfo['has_more'] ??
+        pageInfo['hasMore'] ??
+        pageInfo['has_next'] ??
+        j['has_more'] ??
+        j['hasMore'];
+    return LKPublicBookshelfPage(
+      visible: _jsonFlag(j['visible'] ??
+          privacy['bookshelf_visible'] ??
+          privacy['bookshelfVisible']),
+      books: books,
+      page: page > 0 ? page : fallbackPage,
+      pageSize: pageSize > 0 ? pageSize : fallbackPageSize,
+      total: total,
+      hasMore: rawHasMore == null
+          ? total > page * pageSize || books.length >= pageSize
+          : _jsonFlag(rawHasMore),
+    );
+  }
 }
 
 class LKBook {
@@ -92,6 +649,46 @@ class LKBook {
             (j['updated_at'] as String?) ??
             '',
       );
+
+  Map<String, dynamic> toJson() => {
+        'book_id': bookId,
+        'title': title,
+        'author_name': authorName,
+        'cover_url': coverUrl,
+        'summary': summary,
+        'tags': tags,
+        'word_count': wordCount,
+        'volume_count': volumeCount,
+        'chapter_count': chapterCount,
+        'default_volume_id': defaultVolumeId,
+        'default_chapter_id': defaultChapterId,
+        'serial_status': serialStatus,
+        'is_completed': isCompleted ? 1 : 0,
+        'last_read_chapter_title': lastReadChapterTitle,
+        'unread_chapter_count': unreadChapterCount,
+        'rating_score': ratingScore,
+        'updated_at': updatedAt,
+      };
+}
+
+String bookStatusLabel(LKBook book) {
+  if (book.isCompleted) return '完结';
+  final status = book.serialStatus.trim().toLowerCase();
+  if (status.isEmpty ||
+      const {
+        'serial',
+        'serializing',
+        'ongoing',
+        'in_progress',
+        'publishing',
+      }.contains(status)) {
+    return '连载';
+  }
+  if (const {'complete', 'completed', 'finished', 'done', 'ended', 'end'}
+      .contains(status)) {
+    return '完结';
+  }
+  return book.serialStatus;
 }
 
 class LKVolume {
@@ -130,9 +727,8 @@ class LKChapter {
         wordCount: (j['word_count'] as num?)?.toInt() ?? 0,
         locked: (j['locked'] as num?)?.toInt() == 1,
         unlocked: (j['unlocked'] as num?)?.toInt() == 1,
-        accessType: (j['access_type'] as String?) ??
-            (j['accessType'] as String?) ??
-            '',
+        accessType:
+            (j['access_type'] as String?) ?? (j['accessType'] as String?) ?? '',
       );
 
   bool get braveOnly => accessType.toLowerCase() == 'brave';
@@ -328,20 +924,26 @@ class LKEmojiGroup {
 
 class LKComment {
   final int commentId;
+  final int userUid;
   final String nickname;
   final String avatar;
   final String content;
   final int likeCount;
   final String time;
   final bool liked;
+  final List<LKDynamicMedia> media;
+  final int replyCount;
   LKComment({
     this.commentId = 0,
+    this.userUid = 0,
     this.nickname = '',
     this.avatar = '',
     this.content = '',
     this.likeCount = 0,
     this.time = '',
     this.liked = false,
+    this.media = const [],
+    this.replyCount = 0,
   });
   factory LKComment.fromJson(Map<String, dynamic> j) {
     final author = (j['author'] as Map<String, dynamic>?) ??
@@ -349,10 +951,32 @@ class LKComment {
         const <String, dynamic>{};
     final inter = (j['interaction_state'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
+    dynamic rawMedia = j['media'];
+    if (rawMedia is String && rawMedia.isNotEmpty) {
+      try {
+        rawMedia = jsonDecode(rawMedia);
+      } catch (_) {
+        rawMedia = null;
+      }
+    }
+    final media = rawMedia is List
+        ? rawMedia
+            .whereType<Map>()
+            .map((e) => LKDynamicMedia.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.url.isNotEmpty)
+            .toList()
+        : const <LKDynamicMedia>[];
     return LKComment(
       commentId: (j['comment_id'] as num?)?.toInt() ?? 0,
-      nickname: (author['nickname'] as String?) ?? '',
-      avatar: (author['avatar'] as String?) ?? '',
+      userUid: _jsonInt(author['uid'] ??
+          author['user_id'] ??
+          author['id'] ??
+          j['author_uid'] ??
+          j['user_uid'] ??
+          j['uid'] ??
+          j['user_id']),
+      nickname: (author['nickname'] ?? j['nickname'] ?? '').toString(),
+      avatar: (author['avatar'] ?? j['avatar'] ?? '').toString(),
       content:
           (j['content'] as String?) ?? (j['content_text'] as String?) ?? '',
       likeCount: (j['like_count'] as num?)?.toInt() ?? 0,
@@ -360,6 +984,8 @@ class LKComment {
           (j['publish_time'] as String?) ?? (j['created_at'] as String?) ?? '',
       liked: (j['liked'] as num?)?.toInt() == 1 ||
           (inter['liked'] as num?)?.toInt() == 1,
+      media: media,
+      replyCount: _jsonInt(j['reply_count'] ?? j['replyCount']),
     );
   }
 }
@@ -411,57 +1037,326 @@ class LKHistoryItem {
   }
 }
 
+class LKDynamicMedia {
+  final String url;
+  final int width;
+  final int height;
+  final String resId;
+  final String resUrl;
+  final String resPath;
+  final String storedUrl;
+  final String sourceUrl;
+
+  const LKDynamicMedia({
+    this.url = '',
+    this.width = 0,
+    this.height = 0,
+    this.resId = '',
+    this.resUrl = '',
+    this.resPath = '',
+    this.storedUrl = '',
+    this.sourceUrl = '',
+  });
+
+  factory LKDynamicMedia.fromJson(Map<String, dynamic> j) => LKDynamicMedia(
+        url: (j['url'] ??
+                j['src'] ??
+                j['res_url'] ??
+                j['stored_url'] ??
+                j['source_url'] ??
+                '')
+            .toString(),
+        width: _jsonInt(j['width']),
+        height: _jsonInt(j['height']),
+        resId: (j['res_id'] ?? j['resId'] ?? '').toString(),
+        resUrl: (j['res_url'] ?? j['resUrl'] ?? '').toString(),
+        resPath: (j['res_path'] ?? j['resPath'] ?? '').toString(),
+        storedUrl: (j['stored_url'] ?? j['storedUrl'] ?? '').toString(),
+        sourceUrl: (j['source_url'] ?? j['sourceUrl'] ?? '').toString(),
+      );
+}
+
+class LKDynamicPollOption {
+  final String id;
+  final String text;
+  final String image;
+  final int voteCount;
+  final double percent;
+  final bool selected;
+
+  const LKDynamicPollOption({
+    this.id = '',
+    this.text = '',
+    this.image = '',
+    this.voteCount = 0,
+    this.percent = 0,
+    this.selected = false,
+  });
+
+  factory LKDynamicPollOption.fromJson(Map<String, dynamic> j, int index) {
+    final rawId = j['option_id'] ?? j['optionId'] ?? j['id'] ?? index + 1;
+    return LKDynamicPollOption(
+      id: rawId.toString(),
+      text: (j['text'] ??
+              j['title'] ??
+              j['content'] ??
+              j['label'] ??
+              j['name'] ??
+              '')
+          .toString(),
+      image: (j['image'] ?? j['image_url'] ?? j['imageUrl'] ?? '').toString(),
+      voteCount: _jsonInt(j['vote_count'] ?? j['votes']),
+      percent: (j['percent'] is num)
+          ? (j['percent'] as num).toDouble()
+          : double.tryParse('${j['percent'] ?? j['ratio'] ?? ''}') ?? 0,
+      selected: _jsonFlag(j['voted']),
+    );
+  }
+}
+
+class LKDynamicPoll {
+  final String pollId;
+  final String title;
+  final String description;
+  final String deadlineAt;
+  final int participantCount;
+  final bool ended;
+  final bool voted;
+  final bool multiple;
+  final List<LKDynamicPollOption> options;
+
+  const LKDynamicPoll({
+    this.pollId = '',
+    this.title = '',
+    this.description = '',
+    this.deadlineAt = '',
+    this.participantCount = 0,
+    this.ended = false,
+    this.voted = false,
+    this.multiple = false,
+    this.options = const [],
+  });
+
+  static LKDynamicPoll? tryParse(dynamic raw) {
+    final j = _jsonMap(raw);
+    if (j == null) return null;
+    final source = _jsonMap(j['poll']) ?? j;
+    final viewer = source['viewer_option_ids'] is List
+        ? (source['viewer_option_ids'] as List).map((e) => e.toString()).toSet()
+        : <String>{};
+    final rawOptions = source['options'] ??
+        source['option_list'] ??
+        source['optionList'] ??
+        source['items'] ??
+        source['vote_options'] ??
+        const [];
+    if (rawOptions is! List) return null;
+    final options = rawOptions
+        .whereType<Map>()
+        .toList()
+        .asMap()
+        .entries
+        .map((e) {
+          final option = LKDynamicPollOption.fromJson(
+              Map<String, dynamic>.from(e.value), e.key);
+          return viewer.contains(option.id) && !option.selected
+              ? LKDynamicPollOption(
+                  id: option.id,
+                  text: option.text,
+                  image: option.image,
+                  voteCount: option.voteCount,
+                  percent: option.percent,
+                  selected: true,
+                )
+              : option;
+        })
+        .where(
+            (e) => e.id.isNotEmpty && (e.text.isNotEmpty || e.image.isNotEmpty))
+        .toList();
+    if (options.isEmpty) return null;
+    return LKDynamicPoll(
+      pollId: (source['poll_id'] ?? source['id'] ?? '').toString(),
+      title: (source['title'] ?? source['question'] ?? '').toString(),
+      description: (source['description'] ?? source['desc'] ?? '').toString(),
+      deadlineAt:
+          (source['deadline_at'] ?? source['deadlineAt'] ?? '').toString(),
+      participantCount: _jsonInt(source['participant_count'] ??
+          source['participantCount'] ??
+          source['vote_user_count'] ??
+          source['user_count'] ??
+          source['total_votes']),
+      ended:
+          _jsonFlag(source['ended'] ?? source['is_ended'] ?? source['expired']),
+      voted: _jsonFlag(source['viewer_voted'] ?? source['voted']) ||
+          options.any((e) => e.selected),
+      multiple: _jsonFlag(source['allow_multiple'] ?? source['multiple']),
+      options: options,
+    );
+  }
+}
+
 class LKDynamicItem {
   final int dynamicId;
+  final int authorUid;
+  final String targetType;
   final String eventType;
   final String nickname;
   final String avatar;
+  final List<LKMedal> authorMedals;
+  final String title;
   final String summary;
   final int likeCount;
   final int commentCount;
+  final int favoriteCount;
   final bool liked;
+  final bool favorited;
+  final bool read;
   final String time;
   final int bookId; // 作品卡(带作品链接的动态)
   final String bookTitle;
   final String bookCover;
+  final List<LKDynamicMedia> media;
+  final LKDynamicPoll? poll;
+  bool get isWorkPost =>
+      bookId > 0 ||
+      const {
+        'book_created',
+        'volume_created',
+        'chapter_published',
+      }.contains(eventType) ||
+      const {'book', 'volume', 'chapter'}.contains(targetType);
+
   LKDynamicItem({
     this.dynamicId = 0,
+    this.authorUid = 0,
+    this.targetType = '',
     this.eventType = '',
     this.nickname = '',
     this.avatar = '',
+    this.authorMedals = const [],
+    this.title = '',
     this.summary = '',
     this.likeCount = 0,
     this.commentCount = 0,
+    this.favoriteCount = 0,
     this.liked = false,
+    this.favorited = false,
+    this.read = false,
     this.time = '',
     this.bookId = 0,
     this.bookTitle = '',
     this.bookCover = '',
+    this.media = const [],
+    this.poll,
   });
   factory LKDynamicItem.fromJson(Map<String, dynamic> j) {
-    final author =
-        (j['author'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
-    final stats =
-        (j['stats'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
-    final ist = (j['interaction_state'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
-    final brief = (j['target_brief'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
+    final author = _jsonMap(j['author']) ?? const <String, dynamic>{};
+    final stats = _jsonMap(j['stats']) ?? const <String, dynamic>{};
+    final ist = _jsonMap(j['interaction_state']) ?? const <String, dynamic>{};
+    final brief = _jsonMap(j['target_brief']) ?? const <String, dynamic>{};
+    final targetType =
+        (j['target_type'] ?? brief['target_type'] ?? '').toString();
+    // target_brief.target_id 对纯动态指向动态内容本身，不能当作书号。
+    final rawBookId = brief['book_id'] ??
+        (targetType == 'book' ? brief['target_id'] : j['book_id']);
+    final rawMedia = j['media'];
+    final rawMedals = author['medals'] ??
+        author['medal_list'] ??
+        author['equipped_medals'] ??
+        const [];
+    final authorMedals = rawMedals is List
+        ? rawMedals
+            .whereType<Map>()
+            .map((e) => LKMedal.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.image.isNotEmpty)
+            .take(5)
+            .toList()
+        : const <LKMedal>[];
+    final media = rawMedia is List
+        ? rawMedia
+            .whereType<Map>()
+            .map((e) => LKDynamicMedia.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.url.isNotEmpty)
+            .toList()
+        : const <LKDynamicMedia>[];
     return LKDynamicItem(
-      dynamicId: (j['dynamic_id'] as num?)?.toInt() ?? 0,
-      eventType: (j['event_type'] as String?) ?? '',
-      nickname: (author['nickname'] as String?) ?? '',
-      avatar: (author['avatar'] as String?) ?? '',
-      summary: (j['summary'] as String?) ?? (j['content'] as String?) ?? '',
-      likeCount: (stats['like_count'] as num?)?.toInt() ?? 0,
-      commentCount: (stats['comment_count'] as num?)?.toInt() ?? 0,
-      liked: (ist['liked'] as num?)?.toInt() == 1,
-      time: (j['feed_time'] as String?) ?? (j['publish_time'] as String?) ?? '',
-      bookId: (brief['book_id'] as num?)?.toInt() ??
-          (brief['target_id'] as num?)?.toInt() ??
-          0,
-      bookTitle: (brief['title'] as String?) ?? '',
-      bookCover: (brief['cover_url'] as String?) ?? '',
+      dynamicId: _jsonInt(
+          j['dynamic_id'] ?? j['activity_id'] ?? j['feed_id'] ?? j['id']),
+      authorUid: _jsonInt(author['uid'] ??
+          author['user_id'] ??
+          author['id'] ??
+          j['author_uid'] ??
+          j['user_uid'] ??
+          j['uid'] ??
+          j['user_id']),
+      targetType: targetType,
+      eventType: (j['event_type'] ?? '').toString(),
+      nickname: (author['nickname'] ?? j['nickname'] ?? '').toString(),
+      avatar: (author['avatar'] ?? j['avatar'] ?? '').toString(),
+      authorMedals: authorMedals,
+      title: (j['title'] ?? '').toString(),
+      summary:
+          (j['summary'] ?? j['content'] ?? j['content_text'] ?? '').toString(),
+      likeCount: _jsonInt(stats['like_count'] ?? j['like_count'] ?? j['likes']),
+      commentCount: _jsonInt(
+          stats['comment_count'] ?? j['comment_count'] ?? j['comments']),
+      favoriteCount: _jsonInt(
+          stats['favorite_count'] ?? stats['favorites'] ?? j['favorite_count']),
+      liked: _jsonFlag(ist['liked']),
+      favorited: _jsonFlag(ist['favorited']),
+      read: _jsonFlag(ist['read'] ?? j['read'] ?? j['is_read']),
+      time: (j['feed_time'] ??
+              j['publish_time'] ??
+              j['created_at'] ??
+              j['createdAt'] ??
+              j['time'] ??
+              '')
+          .toString(),
+      bookId: _jsonInt(rawBookId),
+      bookTitle: (brief['title'] ?? '').toString(),
+      bookCover: (brief['cover_url'] ?? '').toString(),
+      media: media,
+      poll: LKDynamicPoll.tryParse(
+          j['poll'] ?? j['vote'] ?? j['poll_json'] ?? j['extension']),
+    );
+  }
+}
+
+class LKDynamicPage {
+  final List<LKDynamicItem> items;
+  final String cursor;
+  final bool hasMore;
+
+  LKDynamicPage({
+    this.items = const [],
+    this.cursor = '',
+    this.hasMore = false,
+  });
+
+  factory LKDynamicPage.fromJson(Map<String, dynamic> j) {
+    final rawList = j['list'] ?? j['items'] ?? j['feed'] ?? const [];
+    final items = rawList is List
+        ? rawList
+            .whereType<Map>()
+            .map((e) => LKDynamicItem.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : const <LKDynamicItem>[];
+    final pageInfo = _jsonMap(j['page_info']) ??
+        _jsonMap(j['pagination']) ??
+        const <String, dynamic>{};
+    final cursor =
+        (j['next_cursor'] ?? j['cursor'] ?? pageInfo['next_cursor'] ?? '')
+            .toString();
+    final rawHasMore = j['has_more'] ??
+        j['hasMore'] ??
+        j['has_next'] ??
+        pageInfo['has_more'] ??
+        pageInfo['hasMore'] ??
+        pageInfo['has_next'];
+    return LKDynamicPage(
+      items: items,
+      cursor: cursor,
+      hasMore: rawHasMore == null ? cursor.isNotEmpty : _jsonFlag(rawHasMore),
     );
   }
 }

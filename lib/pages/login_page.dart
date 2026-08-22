@@ -35,10 +35,21 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) showLkError(context, e);
+      if (mounted) showLkError(context, _loginError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  String _loginError(Object error) {
+    if (error is LKException) {
+      return switch (error.code) {
+        2 => '密码错误，请检查后重试',
+        1001 => '账号不存在，请确认登录邮箱是否正确',
+        _ => error.message.isEmpty ? '登录失败，请稍后重试' : error.message,
+      };
+    }
+    return '登录失败，请检查网络后重试';
   }
 
   @override
@@ -70,12 +81,16 @@ class _LoginPageState extends State<LoginPage> {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Colors.indigo.shade300, Colors.indigo.shade600],
+                          colors: [
+                            Colors.indigo.shade300,
+                            Colors.indigo.shade600
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                              color: Colors.indigo.shade200.withValues(alpha: 0.6),
+                              color:
+                                  Colors.indigo.shade200.withValues(alpha: 0.6),
                               blurRadius: 12,
                               offset: const Offset(0, 4)),
                         ],
@@ -86,8 +101,10 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 20),
                     TextField(
                       controller: _user,
+                      keyboardType: TextInputType.emailAddress,
+                      autofillHints: const [AutofillHints.email],
                       decoration: const InputDecoration(
-                          labelText: '用户名 / 邮箱',
+                          labelText: '邮箱',
                           prefixIcon: Icon(Icons.person_outline)),
                     ),
                     const SizedBox(height: 16),
@@ -95,7 +112,8 @@ class _LoginPageState extends State<LoginPage> {
                       controller: _pwd,
                       obscureText: true,
                       decoration: const InputDecoration(
-                          labelText: '密码', prefixIcon: Icon(Icons.lock_outline)),
+                          labelText: '密码',
+                          prefixIcon: Icon(Icons.lock_outline)),
                       onSubmitted: (_) => _login(),
                     ),
                     const SizedBox(height: 24),

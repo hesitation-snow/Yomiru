@@ -65,33 +65,38 @@ class _DMChatPageState extends State<DMChatPage> {
           AppBar(title: Text(widget.peerName.isEmpty ? '私信' : widget.peerName)),
       body: Column(children: [
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: _messages.length,
-            itemBuilder: (_, i) {
-              final m = _messages[i];
-              final mine = m.isMine(myUid);
-              return Align(
-                alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  constraints: const BoxConstraints(maxWidth: 280),
-                  decoration: BoxDecoration(
-                    color: mine
-                        ? (Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF35523F)
-                            : Colors.lightGreen.shade200)
-                        : (Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF2A2C33)
-                            : Colors.white),
-                    borderRadius: BorderRadius.circular(8),
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(12),
+              itemCount: _messages.length,
+              itemBuilder: (_, i) {
+                final m = _messages[i];
+                final mine = m.isMine(myUid);
+                return Align(
+                  alignment:
+                      mine ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    constraints: const BoxConstraints(maxWidth: 280),
+                    decoration: BoxDecoration(
+                      color: mine
+                          ? (Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF35523F)
+                              : Colors.lightGreen.shade200)
+                          : (Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFF2A2C33)
+                              : Colors.white),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(m.content),
                   ),
-                  child: Text(m.content),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
         SafeArea(
@@ -202,7 +207,8 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(context), child: const Text('好')),
+                onPressed: () => Navigator.pop(context),
+                child: const Text('好')),
             if (newer)
               FilledButton(
                 onPressed: () async {
@@ -233,7 +239,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ThemeMode.system => '跟随系统',
     };
     return Scaffold(
-      appBar: AppBar(title: const Text('设置与资料')),
+      appBar: AppBar(title: const Text('设置')),
       body: ListView(
           padding:
               EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
@@ -246,17 +252,53 @@ class _SettingsPageState extends State<SettingsPage> {
               onTap: () => _darkMode(context),
             ),
             ListTile(
-              leading: const Icon(Icons.military_tech_outlined),
-              title: const Text('我的勋章(可装备)'),
-              onTap: () => _medals(context),
-            ),
-            ListTile(
               leading: const Icon(Icons.offline_bolt_outlined),
               title: const Text('清除缓存'),
-              subtitle: const Text('如果小说未加载最新更新，可点击这里清理本机正文缓存'),
               trailing: const Icon(Icons.chevron_right),
               onTap: _readerCacheCount == 0 ? null : _clearReaderCache,
             ),
+            ListTile(
+              leading: const Icon(Icons.system_update_outlined),
+              title: const Text('检查更新'),
+              trailing: _checkingUpdate
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.chevron_right),
+              onTap: _checkingUpdate ? null : _checkForUpdate,
+            ),
+            if (LKClient.shared.session.isLoggedIn)
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.redAccent),
+                title: const Text('退出登录'),
+                onTap: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('退出登录'),
+                      content: const Text('确定要退出当前账号吗？'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('取消'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(dialogContext, true),
+                          child: const Text('退出'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed != true) return;
+                  await LKApi.logout();
+                  await LKStore.clear();
+                  if (!context.mounted) return;
+                  showLkError(context, '已退出登录');
+                  Navigator.pop(context);
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('关于'),
@@ -269,7 +311,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     builder: (_) => AlertDialog(
                       title: const Text('关于'),
                       content: Text(
-                          '使用 Flutter 开发的 轻之国度 第三方客户端\n当前版本: ${info.version}+${info.buildNumber}'),
+                          '使用 Flutter 开发的 轻之国度 第三方客户端\n当前版本: ${info.version}+${info.buildNumber}\n\n仓库地址:\nhttps://github.com/hesitation-snow/yomiru'),
                       actions: [
                         TextButton(
                             onPressed: () => Navigator.pop(context),
@@ -281,19 +323,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   if (context.mounted) showLkError(context, e);
                 }
               },
-            ),
-            ListTile(
-              leading: const Icon(Icons.system_update_outlined),
-              title: const Text('检查更新'),
-              subtitle: const Text('检查 GitHub Releases 的最新版本'),
-              trailing: _checkingUpdate
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.chevron_right),
-              onTap: _checkingUpdate ? null : _checkForUpdate,
             ),
           ]),
     );
@@ -327,40 +356,6 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           const SizedBox(height: 8),
         ]),
-      ),
-    );
-  }
-
-  void _medals(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (_) => FutureBuilder(
-        future:
-            LKApi.client.post('/api/bff/my-medals-v1', LKApi.client.authed()),
-        builder: (_, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const LkLoadingIndicator(minHeight: 200);
-          }
-          if (snap.hasError) return Text('${snap.error}');
-          final list = ((snap.data?['list'] as List?) ?? const []);
-          if (list.isEmpty) return const Center(child: Text('暂无勋章'));
-          return ListView(
-            children: list.map((m) {
-              final name = m['name'] ?? '';
-              final equipped = (m['equipped'] as num?)?.toInt() == 1;
-              final id = (m['medal_id'] as num?)?.toInt() ??
-                  (m['id'] as num?)?.toInt() ??
-                  0;
-              return ListTile(
-                title: Text('$name${equipped ? '(已装备)' : ''}'),
-                onTap: () async {
-                  await LKApi.toggleMedal(id, !equipped);
-                  if (context.mounted) showLkError(context, '已切换');
-                },
-              );
-            }).toList(),
-          );
-        },
       ),
     );
   }

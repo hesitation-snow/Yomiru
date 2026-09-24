@@ -1,0 +1,21 @@
+# Generated files for the public component package
+source/.dart_tool/
+source/.flutter-plugins
+source/.flutter-plugins-dependencies
+source/build/
+source/coverage/
+
+# Local configuration and signing material never belong in public source
+.env
+.env.*
+**/.wrangler/
+**/.dev.vars*
+**/key.properties
+**/local.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+.DS_Store

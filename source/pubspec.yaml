@@ -1,0 +1,21 @@
+name: yomiru
+description: Selected standalone reader and UI components from Yomiru.
+publish_to: 'none'
+version: 1.5.0+12
+
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_open_chinese_convert: 0.9.0
+  html: ^0.15.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
